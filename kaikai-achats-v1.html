@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0C1410">
+<title>KaïKaï — Achats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* dark-first : 4 niveaux de surface */
+    --bg:#0C1410;         /* fond */
+    --s1:#131E17;         /* surface */
+    --s2:#1A281F;         /* surface élevée */
+    --s3:#223328;         /* surface haute / press */
+    --stroke:rgba(217,181,124,.14);
+    --stroke2:rgba(217,181,124,.28);
+    --gold:#D9B57C;
+    --gold-hi:#EBCF9E;
+    --text:#F2EFE6;
+    --muted:#8FA396;
+    --dim:#5C6E62;
+    --coral:#E8846B;
+    --coral-bg:rgba(232,132,107,.14);
+    --mint:#7FC8A9;
+    --mint-bg:rgba(127,200,169,.13);
+    --r:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{background:var(--bg)}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--text);
+    max-width:520px;margin:0 auto;min-height:100vh;
+    padding-bottom:calc(120px + env(safe-area-inset-bottom));
+    -webkit-font-smoothing:antialiased;
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  .hidden{display:none!important}
+  .num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+  /* ===== HEADER ===== */
+  header{padding:calc(20px + env(safe-area-inset-top)) 20px 4px}
+  .toprow{display:flex;justify-content:space-between;align-items:center;margin-bottom:22px}
+  .wordmark{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:15px;letter-spacing:.5px;color:var(--gold)}
+  .wordmark span{color:var(--dim);font-weight:600}
+  .gearbtn{
+    width:38px;height:38px;border-radius:12px;cursor:pointer;
+    background:var(--s2);border:1px solid var(--stroke);color:var(--muted);
+    font-size:15px;line-height:1;transition:background .15s;
+  }
+  .gearbtn:active{background:var(--s3)}
+  .bigtotal .lab{font-size:11px;font-weight:600;letter-spacing:2.5px;text-transform:uppercase;color:var(--muted)}
+  .bigtotal .val{
+    font-family:'Bricolage Grotesque',sans-serif;font-weight:800;
+    font-size:52px;letter-spacing:-2px;line-height:1.05;margin-top:4px;color:var(--text);
+  }
+  .bigtotal .val .cur{font-size:19px;font-weight:600;color:var(--gold);letter-spacing:0;margin-left:6px}
+  .subtotals{display:flex;gap:8px;margin-top:14px}
+  .pill{
+    display:flex;align-items:baseline;gap:6px;
+    background:var(--s1);border:1px solid var(--stroke);
+    border-radius:100px;padding:7px 14px;font-size:13px;
+  }
+  .pill .k{color:var(--muted);font-weight:500}
+  .pill .v{font-weight:700;color:var(--text)}
+
+  /* ===== MONTH CHIPS ===== */
+  .months{
+    display:flex;gap:8px;overflow-x:auto;padding:20px 20px 4px;
+    scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .months::-webkit-scrollbar{display:none}
+  .chip{
+    flex:0 0 auto;padding:8px 15px;border-radius:100px;font-size:13px;font-weight:600;
+    background:var(--s1);border:1px solid var(--stroke);color:var(--muted);
+    cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif;
+  }
+  .chip.active{background:var(--gold);border-color:var(--gold);color:var(--bg)}
+
+  main{padding:10px 16px 0}
+  h2{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:22px 4px 10px}
+
+  /* ===== CATÉGORIES ===== */
+  .catbar{display:flex;flex-direction:column;gap:9px;background:var(--s1);border:1px solid var(--stroke);border-radius:var(--r);padding:15px 16px;margin-bottom:16px}
+  .catrow{display:flex;align-items:center;gap:11px;font-size:12.5px}
+  .catrow .name{color:var(--muted);flex:0 0 118px;font-weight:500}
+  .catrow .bar{flex:1;height:5px;border-radius:3px;background:var(--s3);overflow:hidden}
+  .catrow .bar i{display:block;height:100%;border-radius:3px;background:linear-gradient(90deg,var(--gold),var(--gold-hi));transition:width .5s ease}
+  .catrow .amt{color:var(--text);font-weight:600;flex:0 0 auto}
+
+  /* ===== TICKETS ===== */
+  .ticket{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    background:var(--s1);border:1px solid var(--stroke);border-radius:var(--r);
+    padding:15px 16px;margin-bottom:9px;cursor:pointer;
+    transition:background .15s,transform .1s;
+  }
+  .ticket:active{background:var(--s2);transform:scale(.985)}
+  .ticket .who{font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ticket .meta{font-size:12px;color:var(--muted);margin-top:3px}
+  .ticket .amt{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:17px;white-space:nowrap;letter-spacing:-.3px}
+  .ticket .amt .cur{font-size:11px;font-weight:600;color:var(--dim);margin-left:2px}
+
+  .flag{font-size:9px;font-weight:700;letter-spacing:1.5px;border-radius:6px;padding:3px 7px}
+  .flag-ch{background:rgba(232,132,107,.15);color:#EFA995}
+  .flag-fr{background:rgba(124,156,217,.15);color:#A9BEE8}
+  .flag-warn{background:var(--coral-bg);color:var(--coral)}
+
+  .empty{text-align:center;color:var(--muted);font-size:14px;padding:56px 28px;line-height:1.7}
+  .empty .ico{font-size:36px;display:block;margin-bottom:12px;opacity:.9}
+  .small{font-size:12px;color:var(--muted);line-height:1.6}
+
+  /* ===== FORMS ===== */
+  select,input{
+    padding:14px 15px;border-radius:14px;border:1px solid var(--stroke2);
+    background:var(--s1);color:var(--text);font-size:15px;width:100%;
+    font-family:'Inter',sans-serif;appearance:none;
+  }
+  select:focus,input:focus{outline:2px solid var(--gold);outline-offset:1px}
+  label{font-size:11px;font-weight:600;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);display:block;margin:16px 0 7px}
+  .row{display:flex;gap:9px;align-items:center}
+
+  .btn{
+    display:block;width:100%;padding:16px;font-size:15px;font-weight:700;
+    border:none;border-radius:15px;cursor:pointer;font-family:'Inter',sans-serif;
+    transition:transform .1s,opacity .15s;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn-gold{background:var(--gold);color:var(--bg)}
+  .btn-line{background:transparent;border:1px solid var(--stroke2);color:var(--text);font-size:14px;padding:13px}
+  .btn-danger{background:var(--coral-bg);color:var(--coral);font-size:14px;padding:13px}
+
+  .msg{margin-top:12px;padding:14px 15px;border-radius:14px;font-size:14px;line-height:1.5}
+  .msg-err{background:var(--coral-bg);color:var(--coral)}
+  .msg-ok{background:var(--mint-bg);color:var(--mint)}
+
+  /* ===== BOTTOM NAV (verre) ===== */
+  nav{
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%);
+    width:100%;max-width:520px;z-index:40;
+    background:rgba(12,20,16,.72);
+    backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);
+    border-top:1px solid var(--stroke);
+    display:flex;align-items:stretch;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  @supports not (backdrop-filter:blur(1px)){ nav{background:rgba(12,20,16,.96)} }
+  .navbtn{
+    flex:1;background:none;border:none;cursor:pointer;padding:12px 0 14px;
+    color:var(--dim);font-family:'Inter',sans-serif;
+    display:flex;flex-direction:column;align-items:center;gap:4px;transition:color .15s;
+  }
+  .navbtn svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .navbtn .lbl{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase}
+  .navbtn.active{color:var(--gold)}
+  .shutterwrap{flex:1.1;display:flex;justify-content:center;position:relative}
+  .shutter{
+    position:absolute;top:-26px;
+    width:66px;height:66px;border-radius:50%;cursor:pointer;
+    background:linear-gradient(145deg,var(--gold-hi),var(--gold) 65%);
+    border:none;
+    box-shadow:0 0 0 5px var(--bg),0 6px 22px rgba(217,181,124,.35);
+    display:flex;align-items:center;justify-content:center;
+    transition:transform .12s;
+  }
+  .shutter:active{transform:scale(.9)}
+  .shutter svg{width:26px;height:26px;stroke:var(--bg);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .shutterlbl{margin-top:44px;font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--gold);text-align:center}
+
+  /* ===== BOTTOM SHEET ===== */
+  .sheet-scrim{
+    position:fixed;inset:0;z-index:50;
+    background:rgba(5,9,7,.55);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;transition:opacity .22s;
+  }
+  .sheet-scrim.on{opacity:1}
+  .sheet{
+    position:fixed;bottom:0;left:50%;transform:translateX(-50%) translateY(102%);
+    width:100%;max-width:520px;z-index:51;
+    background:var(--s2);border:1px solid var(--stroke);border-bottom:none;
+    border-radius:24px 24px 0 0;
+    padding:10px 20px calc(26px + env(safe-area-inset-bottom));
+    max-height:82vh;overflow-y:auto;
+    transition:transform .28s cubic-bezier(.32,.72,.25,1);
+  }
+  .sheet.on{transform:translateX(-50%) translateY(0)}
+  .grab{width:38px;height:4px;border-radius:2px;background:var(--stroke2);margin:4px auto 16px}
+  .sheet .who{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:22px;letter-spacing:-.5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .sheet .meta{font-size:13px;color:var(--muted);margin:5px 0 2px}
+  .sheet .amt{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:38px;letter-spacing:-1.5px;margin:12px 0 4px}
+  .sheet .amt .cur{font-size:16px;color:var(--gold);font-weight:600}
+  .sline{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-top:1px solid var(--stroke);font-size:14px}
+  .sline span:first-child{color:var(--muted)}
+  .sline span:last-child{font-weight:600}
+
+  /* ===== TOAST (verre) ===== */
+  .toast{
+    position:fixed;left:50%;transform:translateX(-50%);
+    bottom:calc(118px + env(safe-area-inset-bottom));z-index:55;
+    width:calc(100% - 36px);max-width:480px;
+    border-radius:16px;padding:15px 17px;font-size:14px;font-weight:500;line-height:1.45;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border:1px solid var(--stroke2);
+    animation:pop .28s cubic-bezier(.32,.72,.25,1);
+  }
+  @keyframes pop{from{opacity:0;transform:translateX(-50%) translateY(14px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  .toast-ok{background:rgba(26,40,31,.85);color:var(--text);border-left:3px solid var(--gold)}
+  .toast-err{background:rgba(60,24,17,.88);color:#F5C9BD;border-left:3px solid var(--coral)}
+
+  /* ===== OVERLAY SCAN ===== */
+  .overlay{
+    position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:18px;padding:32px;text-align:center;
+    background:rgba(9,15,12,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  }
+  .overlay .txt{font-family:'Bricolage Grotesque',sans-serif;font-weight:600;font-size:17px;color:var(--text)}
+  .ring{width:46px;height:46px;border:3px solid var(--stroke2);border-top-color:var(--gold);border-radius:50%;animation:sp .9s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  .mapcard{background:var(--s1);border:1px solid var(--stroke);border-radius:var(--r);padding:15px 16px;margin-bottom:9px}
+  .mapcard .plabel{font-weight:600;font-size:13.5px;margin-bottom:9px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="toprow">
+    <div class="wordmark">KAÏKAÏ <span>/ ACHATS</span></div>
+    <button class="gearbtn" onclick="showTab('config')" aria-label="Réglages">⚙︎</button>
+  </div>
+  <div class="bigtotal" id="bigTotal">
+    <div class="lab" id="btLab">Achats · ce mois</div>
+    <div class="val num" id="btVal">0.00<span class="cur">CHF</span></div>
+    <div class="subtotals">
+      <div class="pill"><span class="k">🇨🇭</span><span class="v num" id="pCH">0.00 CHF</span></div>
+      <div class="pill"><span class="k">🇫🇷</span><span class="v num" id="pFR">0.00 EUR</span></div>
+    </div>
+  </div>
+</header>
+
+<div class="months" id="monthChips"></div>
+
+<main>
+
+<section id="view-list">
+  <div id="verifBlock" class="hidden">
+    <h2>À vérifier</h2>
+    <div id="verifList"></div>
+  </div>
+  <div id="catBox"></div>
+  <div id="ticketList"></div>
+</section>
+
+<section id="view-export" class="hidden">
+  <h2>Export du mois</h2>
+  <label>Mois</label>
+  <select id="exportMonth"></select>
+  <label>Taux EUR → CHF (moyenne du mois)</label>
+  <input type="number" id="fxRate" step="0.0001" value="0.9400" inputmode="decimal">
+  <div style="margin-top:18px">
+    <button class="btn btn-gold" onclick="doExport()">Télécharger le CSV</button>
+  </div>
+  <div class="small" style="margin-top:12px">
+    Deux blocs séparés : fournisseurs Suisse (CHF) et France (EUR converti au taux saisi). Prêt pour ta compta.
+  </div>
+  <div id="exportMsg"></div>
+</section>
+
+<section id="view-config" class="hidden">
+  <h2>Connexions</h2>
+  <label>Supabase — URL du projet</label>
+  <input type="text" id="cfgSbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+  <label>Supabase — clé anon</label>
+  <input type="password" id="cfgSbKey" placeholder="eyJ...">
+  <label>Clé API Anthropic (lecture des photos)</label>
+  <input type="password" id="cfgApiKey" placeholder="sk-ant-...">
+  <div style="margin-top:18px">
+    <button class="btn btn-line" onclick="saveConfig()">Enregistrer et tester</button>
+  </div>
+  <div id="cfgMsg"></div>
+  <h2>Produits → ingrédients</h2>
+  <div class="small" style="margin-bottom:12px">
+    Relie une fois un libellé de ticket à un ingrédient de tes fiches. Ensuite le prix se met à jour tout seul à chaque scan.
+  </div>
+  <div id="mapList"></div>
+</section>
+
+</main>
+
+<nav>
+  <button class="navbtn active" id="tab-list" onclick="showTab('list')">
+    <svg viewBox="0 0 24 24"><path d="M5 3h14v18l-2.5-1.6L14 21l-2-1.4L10 21l-2.5-1.6L5 21V3z"/><path d="M9 8h6M9 12h6"/></svg>
+    <span class="lbl">Tickets</span>
+  </button>
+  <div class="shutterwrap">
+    <button class="shutter" id="scanBtn" onclick="document.getElementById('photoInput').click()" aria-label="Photographier un ticket">
+      <svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4V8z"/><circle cx="12" cy="13" r="3.4"/></svg>
+    </button>
+    <div class="shutterlbl">Scanner</div>
+  </div>
+  <button class="navbtn" id="tab-export" onclick="showTab('export')">
+    <svg viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 15v5h16v-5"/></svg>
+    <span class="lbl">Export</span>
+  </button>
+</nav>
+
+<input type="file" id="photoInput" accept="image/*" capture="environment" class="hidden">
+
+<div id="sheetScrim" class="sheet-scrim hidden" onclick="closeSheet()"></div>
+<div id="sheet" class="sheet"></div>
+
+<div id="overlay" class="overlay hidden">
+  <div class="ring"></div>
+  <div class="txt" id="overlayTxt">Lecture du ticket…</div>
+</div>
+
+<div id="toast" class="hidden"></div>
+
+<script>
+/* =================== CONFIG =================== */
+const LS = "kaikai_achats_cfg";
+let CFG = { sbUrl:"", sbKey:"", apiKey:"" };
+try { Object.assign(CFG, JSON.parse(localStorage.getItem(LS)||"{}")); } catch(e){}
+
+const T_ACHATS = "kaikai_achats";
+const T_MAP = "kaikai_achats_map";
+const TIMEOUT = 6000;
+
+let tickets = [];
+let mappings = [];
+let curMonth = new Date().toISOString().slice(0,7);
+
+/* =================== UTILS =================== */
+const fmt = n => (Number(n)||0).toLocaleString("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2});
+const monthKey = d => (d||"").split(".").reverse().slice(0,2).join("-");
+const todayISO = () => new Date().toISOString();
+const monthLabel = m => {
+  const [y,mo] = m.split("-");
+  const noms=["janv","fév","mars","avr","mai","juin","juil","août","sept","oct","nov","déc"];
+  return `${noms[Number(mo)-1]} ${y.slice(2)}`;
+};
+
+function fetchTO(url, opts){
+  return Promise.race([
+    fetch(url, opts),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),TIMEOUT))
+  ]);
+}
+
+/* =================== SUPABASE =================== */
+function sbHeaders(){
+  return { "apikey":CFG.sbKey, "Authorization":"Bearer "+CFG.sbKey, "Content-Type":"application/json", "Prefer":"return=representation" };
+}
+async function sbSelect(table, query){
+  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}?${query||"select=*"}`, {headers:sbHeaders()});
+  if(!r.ok) throw new Error("Supabase "+r.status);
+  return r.json();
+}
+async function sbInsert(table, row){
+  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}`, {method:"POST",headers:sbHeaders(),body:JSON.stringify(row)});
+  if(!r.ok) throw new Error("Supabase "+r.status);
+  return r.json();
+}
+async function sbUpdate(table, id, patch){
+  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}?id=eq.${id}`, {method:"PATCH",headers:sbHeaders(),body:JSON.stringify(patch)});
+  if(!r.ok) throw new Error("Supabase "+r.status);
+  return r.json();
+}
+async function sbDelete(table, id){
+  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}?id=eq.${id}`, {method:"DELETE",headers:sbHeaders()});
+  if(!r.ok) throw new Error("Supabase "+r.status);
+}
+
+/* =================== PHOTO =================== */
+function compressPhoto(file){
+  return new Promise((res,rej)=>{
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = ()=>{
+      const MAX = 1600;
+      let w=img.width, h=img.height;
+      if(Math.max(w,h)>MAX){ const k=MAX/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
+      const c = document.createElement("canvas"); c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      URL.revokeObjectURL(url);
+      res(c.toDataURL("image/jpeg",0.8).split(",")[1]);
+    };
+    img.onerror = ()=>rej(new Error("image"));
+    img.src = url;
+  });
+}
+
+/* =================== OCR =================== */
+async function readTicket(b64){
+  const prompt = `Tu lis un justificatif d'achat photographié : ticket de caisse, facture A4 ou bulletin de livraison (contexte : restaurant en Suisse, achats en Suisse en CHF ou en France en EUR).
+Réponds UNIQUEMENT avec un objet JSON valide, sans backticks, sans texte autour :
+{
+ "fournisseur":"string",
+ "pays":"CH"|"FR",
+ "devise":"CHF"|"EUR",
+ "date":"JJ.MM.AAAA ou vide",
+ "lignes":[{"designation":"string","quantite":nombre,"unite":"pce|kg|g|l|ml ou vide","prix_unitaire":nombre,"total":nombre}],
+ "total_ticket":nombre,
+ "categorie":"Matières premières"|"Packaging"|"Autre"
+}
+Règles : point décimal. Le pays se déduit de la devise, de l'adresse ou du n° de TVA. Ignore les lignes non-marchandise (fidélité, "montant dû" répété, rendu monnaie). Nourriture/boissons = Matières premières ; barquettes, sacs, contenants = Packaging ; le reste = Autre. Champ illisible : 0 ou "". Si l'image n'est pas un justificatif d'achat : {"erreur":"pas un ticket"}.`;
+  const r = await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key":CFG.apiKey,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"
+    },
+    body:JSON.stringify({
+      model:"claude-sonnet-4-6",
+      max_tokens:1500,
+      messages:[{role:"user",content:[
+        {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
+        {type:"text",text:prompt}
+      ]}]
+    })
+  });
+  if(!r.ok) throw new Error("API "+r.status);
+  const data = await r.json();
+  const txt = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  return JSON.parse(txt.replace(/```json|```/g,"").trim());
+}
+
+/* =================== FLUX SCAN =================== */
+document.getElementById("photoInput").addEventListener("change", async e=>{
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if(!file) return;
+  if(!CFG.apiKey || !CFG.sbUrl || !CFG.sbKey){
+    toast("Configure d'abord tes clés dans les réglages ⚙︎.","err");
+    showTab("config");
+    return;
+  }
+  showOverlay("Lecture du ticket…");
+  if(navigator.vibrate) navigator.vibrate(10);
+  let b64;
+  try{ b64 = await compressPhoto(file); }
+  catch(err){ hideOverlay(); toast("Photo illisible, réessaie.","err"); return; }
+
+  let parsed = null, statut = "ok";
+  try{
+    parsed = await readTicket(b64);
+    if(parsed.erreur) statut = "verif";
+  }catch(err){ statut = "verif"; }
+
+  const row = {
+    date_ticket: parsed?.date || "",
+    fournisseur: parsed?.fournisseur || "À identifier",
+    pays: parsed?.pays==="FR" ? "FR" : "CH",
+    devise: parsed?.devise==="EUR" ? "EUR" : "CHF",
+    categorie: ["Matières premières","Packaging","Autre"].includes(parsed?.categorie) ? parsed.categorie : "Autre",
+    total: Number(parsed?.total_ticket)||0,
+    lignes: Array.isArray(parsed?.lignes) ? parsed.lignes : [],
+    photo: b64,
+    statut,
+    created_at: todayISO()
+  };
+
+  showOverlay("Enregistrement…");
+  try{
+    const [saved] = await sbInsert(T_ACHATS, row);
+    tickets.unshift(saved);
+    hideOverlay();
+    if(navigator.vibrate) navigator.vibrate(statut==="ok"?[15,40,15]:60);
+    if(statut==="verif"){
+      toast("Enregistré mais lecture incomplète → file « À vérifier ».","err");
+    }else{
+      toast(`✓ ${row.fournisseur} — ${fmt(row.total)} ${row.devise}. Tu peux jeter le ticket.`,"ok");
+      await updateIngredientPrices(saved);
+    }
+    const mk = monthKey(row.date_ticket);
+    if(mk && mk.length===7) curMonth = mk;
+    showTab("list");
+    renderAll();
+  }catch(err){
+    hideOverlay();
+    toast("Hors ligne ou erreur base — ticket NON enregistré. Garde le papier.","err");
+  }
+});
+
+function toast(txt, type){
+  const t = document.getElementById("toast");
+  t.className = "toast toast-"+(type==="ok"?"ok":"err");
+  t.textContent = txt;
+  clearTimeout(t._to);
+  t._to = setTimeout(()=>{ t.className="hidden"; }, 5000);
+}
+function showOverlay(t){ document.getElementById("overlayTxt").textContent=t; document.getElementById("overlay").classList.remove("hidden"); }
+function hideOverlay(){ document.getElementById("overlay").classList.add("hidden"); }
+
+/* =================== MAJ PRIX INGRÉDIENTS =================== */
+async function updateIngredientPrices(ticket){
+  for(const l of (ticket.lignes||[])){
+    const label = (l.designation||"").trim().toLowerCase();
+    if(!label) continue;
+    const map = mappings.find(m=>m.produit_label===label);
+    if(map && map.ingredient){
+      const prixKg = l.unite==="kg" && l.quantite>0 ? l.total/l.quantite : l.prix_unitaire;
+      try{ await sbUpdate(T_MAP, map.id, {dernier_prix:prixKg, devise:ticket.devise, maj:todayISO()}); }catch(e){}
+    }else if(!map){
+      try{
+        const [created] = await sbInsert(T_MAP, {produit_label:label, ingredient:"", dernier_prix:0, devise:ticket.devise, maj:todayISO()});
+        mappings.push(created);
+      }catch(e){}
+    }
+  }
+  renderMappings();
+}
+
+/* =================== NAVIGATION =================== */
+function showTab(name){
+  ["list","export","config"].forEach(t=>{
+    document.getElementById("view-"+t).classList.toggle("hidden", t!==name);
+    const btn = document.getElementById("tab-"+t);
+    if(btn) btn.classList.toggle("active", t===name);
+  });
+  document.getElementById("monthChips").classList.toggle("hidden", name!=="list");
+  document.getElementById("bigTotal").classList.toggle("hidden", name==="config");
+  if(name==="list"){ renderList(); }
+  if(name==="config"){ loadCfgFields(); renderMappings(); }
+  if(name==="export"){ fillMonths(); }
+  window.scrollTo({top:0});
+}
+
+/* =================== RENDUS =================== */
+function ticketMonths(){
+  const s = new Set();
+  tickets.forEach(t=>{ const k=monthKey(t.date_ticket); if(k && k.length===7) s.add(k); });
+  const now = new Date().toISOString().slice(0,7);
+  s.add(now);
+  return [...s].sort().reverse();
+}
+function fillMonths(){
+  const ms = ticketMonths();
+  const sel = document.getElementById("exportMonth");
+  const cur = sel.value;
+  sel.innerHTML = ms.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join("");
+  if(ms.includes(cur)) sel.value = cur;
+  const chips = document.getElementById("monthChips");
+  chips.innerHTML = ms.map(m=>
+    `<button class="chip ${m===curMonth?"active":""}" onclick="setMonth('${m}')">${monthLabel(m)}</button>`
+  ).join("");
+}
+function setMonth(m){ curMonth=m; renderAll(); }
+
+function renderHead(){
+  const list = tickets.filter(t=>monthKey(t.date_ticket)===curMonth && t.statut!=="verif");
+  const ch = list.filter(t=>t.pays==="CH").reduce((s,t)=>s+Number(t.total||0),0);
+  const fr = list.filter(t=>t.pays==="FR").reduce((s,t)=>s+Number(t.total||0),0);
+  document.getElementById("btLab").textContent = "Achats · " + monthLabel(curMonth);
+  document.getElementById("btVal").innerHTML = fmt(ch)+'<span class="cur">CHF</span>';
+  document.getElementById("pCH").textContent = fmt(ch)+" CHF";
+  document.getElementById("pFR").textContent = fmt(fr)+" EUR";
+}
+
+function renderList(){
+  const list = tickets.filter(t=>monthKey(t.date_ticket)===curMonth && t.statut!=="verif");
+  const box = document.getElementById("ticketList");
+  const cat = document.getElementById("catBox");
+
+  if(list.length===0){
+    cat.innerHTML="";
+    box.innerHTML=`<div class="empty"><span class="ico">🌺</span>Aucun ticket sur ${monthLabel(curMonth)}.<br>Appuie sur le bouton doré pour scanner.</div>`;
+    return;
+  }
+
+  const cats = {};
+  let tot=0;
+  list.forEach(t=>{ const v=Number(t.total||0); cats[t.categorie]=(cats[t.categorie]||0)+v; tot+=v; });
+  cat.innerHTML = `<div class="catbar">${
+    Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`
+      <div class="catrow">
+        <span class="name">${c}</span>
+        <span class="bar"><i style="width:${tot?Math.round(v/tot*100):0}%"></i></span>
+        <span class="amt num">${fmt(v)}</span>
+      </div>`).join("")
+  }</div>`;
+
+  box.innerHTML = list.map(t=>ticketHTML(t)).join("");
+}
+
+function ticketHTML(t){
+  const flag = t.pays==="FR" ? `<span class="flag flag-fr">FR</span>` : `<span class="flag flag-ch">CH</span>`;
+  const warn = t.statut==="verif" ? `<span class="flag flag-warn">À VÉRIFIER</span>` : "";
+  return `<div class="ticket" onclick="openSheet(${t.id})">
+    <div>
+      <div class="who">${t.fournisseur} ${flag} ${warn}</div>
+      <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
+    </div>
+    <div class="amt num">${fmt(t.total)}<span class="cur">${t.devise}</span></div>
+  </div>`;
+}
+
+function renderVerif(){
+  const v = tickets.filter(t=>t.statut==="verif");
+  document.getElementById("verifBlock").classList.toggle("hidden", v.length===0);
+  document.getElementById("verifList").innerHTML = v.map(t=>ticketHTML(t)).join("");
+}
+
+function renderAll(){ fillMonths(); renderHead(); renderList(); renderVerif(); }
+
+/* =================== BOTTOM SHEET =================== */
+function openSheet(id){
+  const t = tickets.find(x=>x.id===id);
+  if(!t) return;
+  const flag = t.pays==="FR" ? `<span class="flag flag-fr">FR</span>` : `<span class="flag flag-ch">CH</span>`;
+  const warn = t.statut==="verif" ? `<span class="flag flag-warn">À VÉRIFIER</span>` : "";
+  document.getElementById("sheet").innerHTML = `
+    <div class="grab"></div>
+    <div class="who">${t.fournisseur} ${flag} ${warn}</div>
+    <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
+    <div class="amt num">${fmt(t.total)} <span class="cur">${t.devise}</span></div>
+    ${(t.lignes||[]).map(l=>`<div class="sline"><span>${l.designation}${l.quantite?` — ${l.quantite}${l.unite?" "+l.unite:""}`:""}</span><span class="num">${fmt(l.total)}</span></div>`).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
+    <label>Catégorie</label>
+    <select onchange="editTicket(${t.id},'categorie',this.value)">
+      ${["Matières premières","Packaging","Autre"].map(c=>`<option ${c===t.categorie?"selected":""}>${c}</option>`).join("")}
+    </select>
+    <label>Pays fournisseur</label>
+    <select onchange="editTicket(${t.id},'pays',this.value)">
+      <option value="CH" ${t.pays==="CH"?"selected":""}>🇨🇭 Suisse (CHF)</option>
+      <option value="FR" ${t.pays==="FR"?"selected":""}>🇫🇷 France (EUR)</option>
+    </select>
+    ${t.statut==="verif" ? `<div style="margin-top:16px"><button class="btn btn-gold" onclick="markOk(${t.id});closeSheet()">Marquer comme vérifié</button></div>`:""}
+    <div style="margin-top:10px"><button class="btn btn-danger" onclick="delTicket(${t.id})">Supprimer ce ticket</button></div>
+  `;
+  document.getElementById("sheetScrim").classList.remove("hidden");
+  requestAnimationFrame(()=>{
+    document.getElementById("sheetScrim").classList.add("on");
+    document.getElementById("sheet").classList.add("on");
+  });
+}
+function closeSheet(){
+  document.getElementById("sheetScrim").classList.remove("on");
+  document.getElementById("sheet").classList.remove("on");
+  setTimeout(()=>document.getElementById("sheetScrim").classList.add("hidden"),240);
+}
+
+async function editTicket(id, field, val){
+  try{ await sbUpdate(T_ACHATS, id, {[field]:val}); const t=tickets.find(x=>x.id===id); if(t) t[field]=val; renderAll(); }
+  catch(e){ toast("Modification non enregistrée (hors ligne ?)","err"); }
+}
+async function delTicket(id){
+  if(!confirm("Supprimer ce ticket ?")) return;
+  try{ await sbDelete(T_ACHATS, id); tickets = tickets.filter(t=>t.id!==id); closeSheet(); renderAll(); }
+  catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
+}
+async function markOk(id){ await editTicket(id,"statut","ok"); }
+
+/* =================== MAPPINGS =================== */
+function renderMappings(){
+  const box = document.getElementById("mapList");
+  if(mappings.length===0){ box.innerHTML=`<div class="small">Aucun produit scanné pour l'instant.</div>`; return; }
+  box.innerHTML = mappings.map(m=>`
+    <div class="mapcard">
+      <div class="plabel">${m.produit_label}</div>
+      <input type="text" value="${(m.ingredient||"").replace(/"/g,'&quot;')}" placeholder="Nom de l'ingrédient dans tes fiches"
+        onchange="saveMap(${m.id}, this.value)">
+      ${m.dernier_prix ? `<div class="small" style="margin-top:9px">Dernier prix : ${fmt(m.dernier_prix)} ${m.devise||""}/kg</div>`:""}
+    </div>`).join("");
+}
+async function saveMap(id, val){
+  try{ await sbUpdate(T_MAP, id, {ingredient:val.trim()}); const m=mappings.find(x=>x.id===id); if(m) m.ingredient=val.trim(); }
+  catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
+}
+
+/* =================== EXPORT =================== */
+function doExport(){
+  const m = document.getElementById("exportMonth").value;
+  const fx = Number(document.getElementById("fxRate").value)||0.94;
+  const list = tickets.filter(t=>monthKey(t.date_ticket)===m);
+  if(list.length===0){
+    document.getElementById("exportMsg").innerHTML=`<div class="msg msg-err">Aucun ticket sur ${monthLabel(m)}.</div>`;
+    return;
+  }
+  const rows = [];
+  const head = ["Date","Fournisseur","Catégorie","Désignation","Qté","Unité","Prix unit.","Total ligne","Total ticket","Devise","Équiv. CHF"];
+  const push = (t)=>{
+    const eq = t.devise==="EUR" ? (t.total*fx) : t.total;
+    if(!t.lignes || t.lignes.length===0){
+      rows.push([t.date_ticket,t.fournisseur,t.categorie,"","","","","",Number(t.total).toFixed(2),t.devise,eq.toFixed(2)]);
+    }else{
+      t.lignes.forEach((l,i)=>{
+        rows.push([t.date_ticket,t.fournisseur,t.categorie,l.designation,l.quantite,l.unite,
+          Number(l.prix_unitaire).toFixed(2),Number(l.total).toFixed(2),
+          i===0?Number(t.total).toFixed(2):"",t.devise,i===0?eq.toFixed(2):""]);
+      });
+    }
+  };
+  const ch = list.filter(t=>t.pays==="CH");
+  const fr = list.filter(t=>t.pays==="FR");
+  rows.push([`=== FOURNISSEURS SUISSE — ${m} ===`]); rows.push(head);
+  ch.forEach(push);
+  rows.push([`Sous-total Suisse`,"","","","","","","",ch.reduce((s,t)=>s+Number(t.total),0).toFixed(2),"CHF",""]);
+  rows.push([]);
+  rows.push([`=== FOURNISSEURS FRANCE — ${m} — taux ${fx} ===`]); rows.push(head);
+  fr.forEach(push);
+  const totFR = fr.reduce((s,t)=>s+Number(t.total),0);
+  rows.push([`Sous-total France`,"","","","","","","",totFR.toFixed(2),"EUR",(totFR*fx).toFixed(2)]);
+
+  const csv = rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `kaikai_achats_${m}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  document.getElementById("exportMsg").innerHTML=`<div class="msg msg-ok">✓ Export ${monthLabel(m)} téléchargé (${list.length} tickets).</div>`;
+}
+
+/* =================== CONFIG UI =================== */
+function loadCfgFields(){
+  document.getElementById("cfgSbUrl").value = CFG.sbUrl;
+  document.getElementById("cfgSbKey").value = CFG.sbKey;
+  document.getElementById("cfgApiKey").value = CFG.apiKey;
+}
+async function saveConfig(){
+  CFG.sbUrl = document.getElementById("cfgSbUrl").value.trim().replace(/\/$/,"");
+  CFG.sbKey = document.getElementById("cfgSbKey").value.trim();
+  CFG.apiKey = document.getElementById("cfgApiKey").value.trim();
+  localStorage.setItem(LS, JSON.stringify(CFG));
+  document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">Enregistré. Test de connexion…</div>`;
+  try{
+    await loadAll();
+    document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">✓ Connecté — ${tickets.length} tickets chargés.</div>`;
+  }catch(e){
+    document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-err">Connexion Supabase échouée : vérifie l'URL, la clé, et que les tables existent.</div>`;
+  }
+}
+
+/* =================== INIT =================== */
+async function loadAll(){
+  tickets = await sbSelect(T_ACHATS, "select=*&order=created_at.desc&limit=1000");
+  try{ mappings = await sbSelect(T_MAP, "select=*"); }catch(e){ mappings=[]; }
+  renderAll();
+}
+(async ()=>{
+  renderAll();
+  if(CFG.sbUrl && CFG.sbKey){
+    try{ await loadAll(); }
+    catch(e){ toast("Connexion base impossible — vérifie les réglages ⚙︎.","err"); }
+  }else{
+    showTab("config");
+  }
+})();
+</script>
+</body>
+</html>
