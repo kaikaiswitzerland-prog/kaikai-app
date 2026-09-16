@@ -629,12 +629,15 @@ function renderList(){
 function ticketHTML(t){
   const flag = t.pays==="FR" ? `<span class="flag flag-fr">FR</span>` : `<span class="flag flag-ch">CH</span>`;
   const warn = t.statut==="verif" ? `<span class="flag flag-warn">À VÉRIFIER</span>` : "";
-  return `<div class="ticket" onclick="openSheet('${t.id}')">
-    <div>
+  return `<div class="ticket" style="position:relative" onclick="openSheet('${t.id}')">
+    <div style="flex:1">
       <div class="who">${t.fournisseur} ${flag} ${warn}</div>
-      <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
+      <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie} · ${(t.lignes||[]).length} art.</div>
     </div>
-    <div class="amt num">${fmt(t.total)}<span class="cur">${t.devise}</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="amt num">${fmt(t.total)}<span class="cur">${t.devise}</span></div>
+      <button onclick="event.stopPropagation();delTicket('${t.id}')" style="background:none;border:none;color:#c44;font-size:18px;padding:6px;cursor:pointer">🗑</button>
+    </div>
   </div>`;
 }
 
@@ -719,7 +722,7 @@ function openSheet(id){
     <div class="who">${t.fournisseur} ${flag} ${warn}</div>
     <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
     <div class="amt num">${fmt(t.total)} <span class="cur">${t.devise}</span></div>
-    ${(t.lignes||[]).map(l=>`<div class="sline"><span>${l.designation}${l.quantite?` — ${l.quantite}${l.unite?" "+l.unite:""}`:""}</span><span class="num">${fmt(l.total)}</span></div>`).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
+    ${(t.lignes||[]).map((l,i)=>{const pu=l.unite==="kg"&&l.quantite>0?(l.total/l.quantite):l.prix_unitaire;const uLabel=l.unite==="kg"?"/kg":"/pce";return `<div class="sline" style="flex-wrap:wrap"><span style="flex:1">${l.designation}${l.quantite?` — ${l.quantite}${l.unite?" "+l.unite:""}`:""}</span><span class="num" style="margin-right:10px">${fmt(l.total)}</span><button onclick="supprimerLigne('${t.id}',${i})" style="background:none;border:none;color:#c44;font-size:18px;padding:0 4px;cursor:pointer">✕</button>${pu?`<div style="width:100%;font-size:11px;color:var(--muted);margin-top:2px">${fmt(pu)} ${t.devise||""}${uLabel}</div>`:""}</div>`;}).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
     <label>Catégorie</label>
     <select onchange="editTicket('${t.id}','categorie',this.value)">
       ${["Matières premières","Packaging","Autre"].map(c=>`<option ${c===t.categorie?"selected":""}>${c}</option>`).join("")}
@@ -747,6 +750,19 @@ function closeSheet(){
 async function editTicket(id, field, val){
   try{ await sbUpdate(T_ACHATS, id, {[field]:val}); const t=tickets.find(x=>x.id===id); if(t) t[field]=val; renderAll(); }
   catch(e){ toast("Modification non enregistrée (hors ligne ?)","err"); }
+}
+async function supprimerLigne(ticketId, idx){
+  const t = tickets.find(x=>String(x.id)===String(ticketId));
+  if(!t || !t.lignes || !t.lignes[idx]) return;
+  const nom = t.lignes[idx].designation || "ligne";
+  t.lignes.splice(idx, 1);
+  t.total = t.lignes.reduce((s,l)=>s+Number(l.total||0), 0);
+  try{
+    await sbUpdate(T_ACHATS, t.id, {lignes:t.lignes, total:t.total});
+    toast(`${nom} supprimé — total recalculé.`,"ok");
+    openSheet(t.id);
+    renderAll();
+  }catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
 }
 async function delTicket(id){
   if(!confirm("Supprimer ce ticket ?")) return;
