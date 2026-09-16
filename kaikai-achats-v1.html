@@ -250,11 +250,7 @@
     <h2>À vérifier</h2>
     <div id="verifList"></div>
   </div>
-  <div id="prixBlock" class="hidden">
-    <h2>Prix à valider</h2>
-    <div class="small" style="margin-bottom:12px">Rien ne bouge dans tes fiches tant que tu n'as pas validé.</div>
-    <div id="prixList"></div>
-  </div>
+
   <div id="catBox"></div>
   <div id="ticketList"></div>
 </section>
@@ -288,7 +284,7 @@
   <div id="cfgMsg"></div>
   <h2>Produits → ingrédients</h2>
   <div class="small" style="margin-bottom:12px">
-    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, les nouveaux prix arrivent dans « Prix à valider » — rien n'est modifié sans ton accord.
+    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, les prix des produits déjà mappés se mettent à jour automatiquement dans tes fiches food cost. Les nouveaux produits apparaissent ici pour que tu les relies une fois.
   </div>
   <div id="mapList"></div>
 </section>
@@ -332,7 +328,6 @@ try { Object.assign(CFG, JSON.parse(localStorage.getItem(LS)||"{}")); } catch(e)
 
 const T_ACHATS = "kaikai_achats";
 const T_MAP = "kaikai_achats_map";
-const T_PRIX = "kaikai_prix_attente";
 const T_DATA = "kaikai_data";
 const SK_PRICES = "kaikaikGeneva_prices_v8";
 // Clés ingrédients food cost (pour le dropdown de mapping)
@@ -355,7 +350,6 @@ const TIMEOUT = 6000;
 
 let tickets = [];
 let mappings = [];
-let pending = [];
 let curMonth = new Date().toISOString().slice(0,7);
 
 /* =================== UTILS =================== */
@@ -524,7 +518,7 @@ function hideOverlay(){ document.getElementById("overlay").classList.add("hidden
 
 /* =================== MAJ PRIX INGRÉDIENTS =================== */
 async function updateIngredientPrices(ticket){
-  let nb = 0;
+  let updated = 0, newProd = 0;
   for(const l of (ticket.lignes||[])){
     const label = (l.designation||"").trim().toLowerCase();
     if(!label) continue;
@@ -532,26 +526,25 @@ async function updateIngredientPrices(ticket){
     if(map && map.ingredient){
       const prixKg = l.unite==="kg" && l.quantite>0 ? l.total/l.quantite : l.prix_unitaire;
       if(!prixKg || Math.abs(prixKg-(Number(map.dernier_prix)||0))<0.005) continue;
-      const deja = pending.find(p=>p.produit_label===label);
       try{
-        if(deja){
-          await sbUpdate(T_PRIX, deja.id, {nouveau_prix:prixKg, devise:ticket.devise, fournisseur:ticket.fournisseur, date_ticket:ticket.date_ticket});
-          deja.nouveau_prix=prixKg; deja.devise=ticket.devise; deja.fournisseur=ticket.fournisseur; deja.date_ticket=ticket.date_ticket;
-        }else{
-          const [created] = await sbInsert(T_PRIX, {produit_label:label, ingredient:map.ingredient, ancien_prix:Number(map.dernier_prix)||0, nouveau_prix:prixKg, devise:ticket.devise, fournisseur:ticket.fournisseur, date_ticket:ticket.date_ticket, created_at:todayISO()});
-          pending.unshift(created);
-        }
-        nb++;
+        await sbUpdate(T_MAP, map.id, {dernier_prix:prixKg, devise:ticket.devise, maj:todayISO()});
+        map.dernier_prix = prixKg; map.devise = ticket.devise;
+        await syncFoodCostPrice(map.ingredient, prixKg);
+        updated++;
       }catch(e){}
     }else if(!map){
       try{
         const [created] = await sbInsert(T_MAP, {produit_label:label, ingredient:"", dernier_prix:0, devise:ticket.devise, maj:todayISO()});
         mappings.push(created);
+        newProd++;
       }catch(e){}
     }
   }
-  if(nb>0) toast(`${nb} prix en attente de ta validation.`,"ok");
-  renderMappings(); renderPending();
+  let msg = [];
+  if(updated) msg.push(updated+" prix mis à jour dans tes fiches");
+  if(newProd) msg.push(newProd+" nouveau"+(newProd>1?"x":"")+" produit"+(newProd>1?"s":"")+" à mapper ⚙︎");
+  if(msg.length) toast(msg.join(" · "), updated?"ok":"err");
+  renderMappings();
 }
 
 /* =================== NAVIGATION =================== */
@@ -647,51 +640,14 @@ function renderVerif(){
   document.getElementById("verifList").innerHTML = v.map(t=>ticketHTML(t)).join("");
 }
 
-/* =================== PRIX À VALIDER =================== */
-function renderPending(){
-  const box = document.getElementById("prixBlock");
-  const list = document.getElementById("prixList");
-  if(!box) return;
-  box.classList.toggle("hidden", pending.length===0);
-  list.innerHTML = pending.map(p=>`
-    <div class="mapcard">
-      <div class="plabel">${p.ingredient||p.produit_label}</div>
-      <div class="small" style="margin:4px 0 10px">${p.produit_label}${p.fournisseur?" · "+p.fournisseur:""}${p.date_ticket?" · "+p.date_ticket:""}</div>
-      <div class="num" style="margin-bottom:10px">${fmt(p.ancien_prix)} → <b>${fmt(p.nouveau_prix)}</b> ${p.devise||""}/kg</div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-gold" style="flex:1" onclick="validerPrix('${p.id}')">✓ Valider</button>
-        <button class="btn btn-line" style="flex:1" onclick="refuserPrix('${p.id}')">✗ Refuser</button>
-      </div>
-    </div>`).join("") + (pending.length>1?`<div style="margin-top:10px"><button class="btn btn-gold" onclick="toutValider()">Tout valider (${pending.length})</button></div>`:"");
-}
-async function validerPrix(id){
-  const p = pending.find(x=>String(x.id)===String(id));
-  if(!p) return;
-  const map = mappings.find(m=>m.produit_label===p.produit_label);
-  try{
-    if(map){ await sbUpdate(T_MAP, map.id, {dernier_prix:p.nouveau_prix, devise:p.devise, maj:todayISO()}); map.dernier_prix=p.nouveau_prix; map.devise=p.devise; }
-    // Mettre à jour l'appli food cost (kaikai_data)
-    if(p.ingredient && FC_INGREDIENTS[p.ingredient]){
-      await syncFoodCostPrice(p.ingredient, p.nouveau_prix);
-    }
-    await sbDelete(T_PRIX, p.id);
-    pending = pending.filter(x=>x.id!==p.id);
-    toast(`✓ ${FC_INGREDIENTS[p.ingredient]||p.produit_label} : ${fmt(p.nouveau_prix)} ${p.devise||""} appliqué.`,"ok");
-    renderMappings(); renderPending();
-  }catch(e){ toast("Validation impossible (hors ligne ?)","err"); }
-}
-
 async function syncFoodCostPrice(ingKey, newPrice){
   try{
-    // Lire les prix actuels de l'appli food cost
     const r = await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA+"?id=eq."+SK_PRICES+"&select=contenu",{headers:sbHeaders()});
     if(!r.ok) return;
     const rows = await r.json();
     let data = {ING:{},DS:{},BS:{},PACK:{}};
     if(rows.length>0 && rows[0].contenu) data = JSON.parse(rows[0].contenu);
-    // Mettre à jour le prix de l'ingrédient
     data.ING[ingKey] = newPrice;
-    // Écrire en retour
     await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA,{
       method:"POST",
       headers:Object.assign({},sbHeaders(),{"Prefer":"resolution=merge-duplicates"}),
@@ -699,17 +655,8 @@ async function syncFoodCostPrice(ingKey, newPrice){
     });
   }catch(e){ console.warn("Sync food cost échoué:",e); }
 }
-async function refuserPrix(id){
-  const p = pending.find(x=>String(x.id)===String(id));
-  if(!p) return;
-  try{ await sbDelete(T_PRIX, p.id); pending = pending.filter(x=>x.id!==p.id); renderPending(); }
-  catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
-}
-async function toutValider(){
-  for(const p of [...pending]) await validerPrix(p.id);
-}
 
-function renderAll(){ fillMonths(); renderHead(); renderList(); renderVerif(); renderPending(); }
+function renderAll(){ fillMonths(); renderHead(); renderList(); renderVerif(); }
 
 /* =================== BOTTOM SHEET =================== */
 function openSheet(id){
@@ -862,7 +809,6 @@ async function saveConfig(){
 async function loadAll(){
   tickets = await sbSelect(T_ACHATS, "select=*&order=created_at.desc&limit=1000");
   try{ mappings = await sbSelect(T_MAP, "select=*"); }catch(e){ mappings=[]; }
-  try{ pending = await sbSelect(T_PRIX, "select=*&order=created_at.desc"); }catch(e){ pending=[]; }
   renderAll();
 }
 (async ()=>{
