@@ -336,7 +336,7 @@ const T_MAP = "kaikai_achats_map";
 const T_DATA = "kaikai_data";
 const SK_PRICES = "kaikaikGeneva_prices_reel"; // espace séparé : ne touche jamais aux prix des fiches
 // Clés ingrédients food cost (pour le dropdown de mapping)
-const FC_INGREDIENTS = {
+let FC_INGREDIENTS = {
   thon:"Thon rouge",poulet:"Poulet",porc:"Porc rôti",boeuf:"Bœuf",
   salade:"Salade verte",chouB:"Chou blanc",chouR:"Chou rouge",tomates:"Tomates",
   concombre:"Concombre",carottes:"Carottes",champignons:"Champignons",oignon:"Oignon",
@@ -353,7 +353,7 @@ const FC_INGREDIENTS = {
   eau:"Eau plate/gazeuse (boisson vendue)", jus:"Jus exotiques (boisson vendue)",
   coulant:"Coulant au chocolat (dessert acheté)", cheesecake:"Cheesecake (dessert acheté)"
 };
-const FC_UNIT = { laitCoco:"L", huileSesameLiq:"L", sauceDozo:"L", sauceArachide:"L", huileArachide:"L", cremeEntiere:"L", avocat:"pièce", gelatine:"feuille", eau:"pièce", jus:"pièce", coulant:"pièce", cheesecake:"pièce" };
+let FC_UNIT = { laitCoco:"L", huileSesameLiq:"L", sauceDozo:"L", sauceArachide:"L", huileArachide:"L", cremeEntiere:"L", avocat:"pièce", gelatine:"feuille", eau:"pièce", jus:"pièce", coulant:"pièce", cheesecake:"pièce" };
 const FC_GROUP = { eau:"BS", jus:"BS", coulant:"DS", cheesecake:"DS" };
 const fcUnit = k => FC_UNIT[k] || "kg";
 const fcGroup = k => FC_GROUP[k] || "ING";
@@ -694,6 +694,19 @@ function renderVerif(){
   document.getElementById("verifList").innerHTML = v.map(t=>ticketHTML(t)).join("");
 }
 
+async function loadCustomIngredients(){
+  // ingrédients créés directement dans l'appli food cost (clé kaikaikGeneva_ing_custom_v1)
+  try{
+    const rows = await sbSelect(T_DATA, "select=contenu&id=eq.kaikaikGeneva_ing_custom_v1");
+    if(!rows[0] || !rows[0].contenu) return;
+    const d = JSON.parse(rows[0].contenu);
+    Object.keys(d).forEach(k=>{
+      if(!d[k] || !d[k].name) return;
+      FC_INGREDIENTS[k] = d[k].name;
+      if(d[k].unit && d[k].unit!=="kg") FC_UNIT[k] = d[k].unit;
+    });
+  }catch(e){}
+}
 async function syncFoodCostPrice(ingKey, newPrice, meta){
   try{
     const r = await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA+"?id=eq."+SK_PRICES+"&select=contenu",{headers:sbHeaders()});
@@ -950,6 +963,7 @@ async function saveConfig(){
 async function loadAll(){
   tickets = await sbSelect(T_ACHATS, "select=id,date_ticket,fournisseur,pays,devise,categorie,total,lignes,statut,created_at&order=created_at.desc&limit=1000");
   try{ mappings = await sbSelect(T_MAP, "select=*"); }catch(e){ mappings=[]; }
+  await loadCustomIngredients();
   renderAll();
 }
 (async ()=>{
