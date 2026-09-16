@@ -278,13 +278,15 @@
   <input type="password" id="cfgSbKey" placeholder="eyJ...">
   <label>Clé API Anthropic (lecture des photos)</label>
   <input type="password" id="cfgApiKey" placeholder="sk-ant-...">
+  <label>Taux EUR → CHF (pour convertir les tickets France)</label>
+  <input type="number" id="cfgFx" step="0.0001" value="0.9400" inputmode="decimal">
   <div style="margin-top:18px">
     <button class="btn btn-line" onclick="saveConfig()">Enregistrer et tester</button>
   </div>
   <div id="cfgMsg"></div>
   <h2>Produits → ingrédients</h2>
   <div class="small" style="margin-bottom:12px">
-    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, les prix des produits déjà mappés se mettent à jour automatiquement dans tes fiches food cost. Les nouveaux produits apparaissent ici pour que tu les relies une fois.
+    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, l'app reconnaît les produits toute seule et met les prix à jour dans tes fiches food cost (convertis en CHF). Vérifie ici les rares cas où elle s'est trompée.
   </div>
   <div id="mapList"></div>
 </section>
@@ -323,8 +325,11 @@
 <script>
 /* =================== CONFIG =================== */
 const LS = "kaikai_achats_cfg";
-let CFG = { sbUrl:"", sbKey:"", apiKey:"" };
+const SB_DEFAULT_URL = "https://ybcrabfzzwezvzkxprdl.supabase.co";
+const SB_DEFAULT_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliY3JhYmZ6endlenZ6a3hwcmRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NDg4NzksImV4cCI6MjA5OTUyNDg3OX0.2DkBTk_IFZMrAfEpZC1mL3lubG7v5ywp0JXk52LNHtg";
+let CFG = { sbUrl:SB_DEFAULT_URL, sbKey:SB_DEFAULT_KEY, apiKey:"", fx:0.94 };
 try { Object.assign(CFG, JSON.parse(localStorage.getItem(LS)||"{}")); } catch(e){}
+if(!CFG.sbUrl) CFG.sbUrl = SB_DEFAULT_URL; if(!CFG.sbKey) CFG.sbKey = SB_DEFAULT_KEY;
 
 const T_ACHATS = "kaikai_achats";
 const T_MAP = "kaikai_achats_map";
@@ -344,9 +349,16 @@ const FC_INGREDIENTS = {
   gelatine:"Gélatine",sucre:"Sucre blanc",sucreCanne:"Sucre de canne",
   boudoir:"Boudoirs",fruitRouges:"Fruits rouges congelés",citron:"Citron",
   banane:"Banane mûre",perlesJapon:"Perles du Japon",crumble:"Crumble maison",
-  gingembreConfit:"Gingembre confit rose"
+  gingembreConfit:"Gingembre confit rose",
+  eau:"Eau plate/gazeuse (boisson vendue)", jus:"Jus exotiques (boisson vendue)",
+  coulant:"Coulant au chocolat (dessert acheté)", cheesecake:"Cheesecake (dessert acheté)"
 };
-const TIMEOUT = 6000;
+const FC_UNIT = { laitCoco:"L", huileSesameLiq:"L", sauceDozo:"L", sauceArachide:"L", huileArachide:"L", cremeEntiere:"L", avocat:"pièce", gelatine:"feuille", eau:"pièce", jus:"pièce", coulant:"pièce", cheesecake:"pièce" };
+const FC_GROUP = { eau:"BS", jus:"BS", coulant:"DS", cheesecake:"DS" };
+const fcUnit = k => FC_UNIT[k] || "kg";
+const fcGroup = k => FC_GROUP[k] || "ING";
+const FC_LIST = () => Object.keys(FC_INGREDIENTS).map(k=>`${k} (${FC_INGREDIENTS[k]}, prix par ${fcUnit(k)})`).join(", ");
+const TIMEOUT = 20000;
 
 let tickets = [];
 let mappings = [];
@@ -354,7 +366,13 @@ let curMonth = new Date().toISOString().slice(0,7);
 
 /* =================== UTILS =================== */
 const fmt = n => (Number(n)||0).toLocaleString("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2});
-const monthKey = d => (d||"").split(".").reverse().slice(0,2).join("-");
+const monthKey = d => {
+  const m = String(d||"").match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
+  if(!m) return "";
+  let y = m[3]; if(y.length===2) y = "20"+y;
+  return y+"-"+m[2].padStart(2,"0");
+};
+const ticketMonth = t => monthKey(t.date_ticket) || String(t.created_at||"").slice(0,7);
 const todayISO = () => new Date().toISOString();
 const monthLabel = m => {
   const [y,mo] = m.split("-");
@@ -399,13 +417,13 @@ function compressPhoto(file){
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = ()=>{
-      const MAX = 1600;
+      const MAX = 1280;
       let w=img.width, h=img.height;
       if(Math.max(w,h)>MAX){ const k=MAX/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
       const c = document.createElement("canvas"); c.width=w; c.height=h;
       c.getContext("2d").drawImage(img,0,0,w,h);
       URL.revokeObjectURL(url);
-      res(c.toDataURL("image/jpeg",0.8).split(",")[1]);
+      res(c.toDataURL("image/jpeg",0.7).split(",")[1]);
     };
     img.onerror = ()=>rej(new Error("image"));
     img.src = url;
@@ -421,10 +439,11 @@ Réponds UNIQUEMENT avec un objet JSON valide, sans backticks, sans texte autour
  "pays":"CH"|"FR",
  "devise":"CHF"|"EUR",
  "date":"JJ.MM.AAAA ou vide",
- "lignes":[{"designation":"string","quantite":nombre,"unite":"pce|kg|g|l|ml ou vide","prix_unitaire":nombre,"total":nombre}],
+ "lignes":[{"designation":"string","quantite":nombre,"unite":"pce|kg|g|l|ml ou vide","prix_unitaire":nombre,"total":nombre,"ingredient":"clé ou null","contenance":nombre ou null}],
  "total_ticket":nombre,
  "categorie":"Matières premières"|"Packaging"|"Autre"
 }
+Pour chaque ligne, "ingredient" = la clé de l'ingrédient de la cuisine correspondant, choisie dans cette liste : ${FC_LIST()}. Mets null si la ligne n'est aucun de ces ingrédients (eau en bouteille, produits ménagers, achats perso, etc.). "contenance" = ce que contient UNE unité achetée, exprimé dans l'unité de prix de l'ingrédient : en kg ou L pour un paquet/bouteille (ex : paquet de nouilles 250 g → 0.25 ; bouteille de lait de coco 400 ml → 0.4), en nombre de pièces pour un lot d'articles vendus à la pièce (ex : "pack 6x50cl" d'eau → 6). Utilise le libellé et ta connaissance des formats courants du produit ; si la ligne est déjà au poids (unite kg/g/l/ml) ou si tu ne sais pas, null.
 Règles : point décimal. Le pays se déduit de la devise, de l'adresse ou du n° de TVA. Ignore les lignes non-marchandise (fidélité, "montant dû" répété, rendu monnaie). Nourriture/boissons = Matières premières ; barquettes, sacs, contenants = Packaging ; le reste = Autre. Champ illisible : 0 ou "". Si l'image n'est pas un justificatif d'achat : {"erreur":"pas un ticket"}.`;
   const r = await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
@@ -436,7 +455,7 @@ Règles : point décimal. Le pays se déduit de la devise, de l'adresse ou du n�
     },
     body:JSON.stringify({
       model:"claude-sonnet-4-6",
-      max_tokens:1500,
+      max_tokens:2500,
       messages:[{role:"user",content:[
         {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
         {type:"text",text:prompt}
@@ -469,7 +488,17 @@ document.getElementById("photoInput").addEventListener("change", async e=>{
   try{
     parsed = await readTicket(b64);
     if(parsed.erreur) statut = "verif";
-  }catch(err){ statut = "verif"; }
+  }catch(err){
+    const s = String(err && err.message || "");
+    if(/API 401/.test(s)){ hideOverlay(); toast("Clé API Anthropic refusée — vérifie-la dans ⚙︎.","err"); showTab("config"); return; }
+    if(/API 4(00|02)/.test(s)){ hideOverlay(); toast("Crédit API épuisé — recharge sur console.anthropic.com.","err"); return; }
+    statut = "verif";
+  }
+  // Doublon probable ?
+  if(parsed && !parsed.erreur){
+    const dup = tickets.find(t=>t.fournisseur===parsed.fournisseur && t.date_ticket===(parsed.date||"") && Math.abs(Number(t.total)-Number(parsed.total_ticket||0))<0.01);
+    if(dup && !confirm(`Un ticket ${parsed.fournisseur} du ${parsed.date} de ${fmt(parsed.total_ticket)} existe déjà. L'enregistrer quand même ?`)){ hideOverlay(); return; }
+  }
 
   const row = {
     date_ticket: parsed?.date || "",
@@ -496,7 +525,7 @@ document.getElementById("photoInput").addEventListener("change", async e=>{
       toast(`✓ ${row.fournisseur} — ${fmt(row.total)} ${row.devise}. Tu peux jeter le ticket.`,"ok");
       await updateIngredientPrices(saved);
     }
-    const mk = monthKey(row.date_ticket);
+    const mk = ticketMonth(saved);
     if(mk && mk.length===7) curMonth = mk;
     showTab("list");
     renderAll();
@@ -517,33 +546,58 @@ function showOverlay(t){ document.getElementById("overlayTxt").textContent=t; do
 function hideOverlay(){ document.getElementById("overlay").classList.add("hidden"); }
 
 /* =================== MAJ PRIX INGRÉDIENTS =================== */
+function prixBase(l, map){
+  // prix dans l'unité de l'ingrédient food cost (kg / L / pièce)
+  const tot = Number(l.total)||0, q = Number(l.quantite)||0;
+  if(!tot || !q) return null;
+  if(l.unite==="kg" || l.unite==="l")  return tot/q;
+  if(l.unite==="g"  || l.unite==="ml") return tot/(q/1000);
+  // vendu à la pièce / au paquet : il faut la contenance d'une unité
+  const cont = Number(map.poids_unite) || 0;
+  if(cont>0) return tot/(q*cont);
+  if(fcUnit(map.ingredient)==="pièce") return tot/q; // 1 unité = 1 pièce
+  return null;
+}
+function toCHF(prix, devise){ return devise==="EUR" ? prix*(CFG.fx||0.94) : prix; }
+async function appliquerPrix(map, l, ticket){
+  const p = prixBase(l, map);
+  if(!p) return false;
+  const pCHF = toCHF(p, ticket.devise);
+  if(Math.abs(pCHF-(Number(map.dernier_prix)||0))<0.005) return false;
+  await sbUpdate(T_MAP, map.id, {dernier_prix:pCHF, devise:"CHF", maj:todayISO()});
+  map.dernier_prix = pCHF; map.devise = "CHF";
+  await syncFoodCostPrice(map.ingredient, Number(pCHF.toFixed(3)));
+  return true;
+}
 async function updateIngredientPrices(ticket){
-  let updated = 0, newProd = 0;
+  let updated = 0, newAuto = 0, aVerifier = 0, sansPoids = 0;
   for(const l of (ticket.lignes||[])){
     const label = (l.designation||"").trim().toLowerCase();
     if(!label) continue;
-    const map = mappings.find(m=>m.produit_label===label);
-    if(map && map.ingredient){
-      const prixKg = l.unite==="kg" && l.quantite>0 ? l.total/l.quantite : l.prix_unitaire;
-      if(!prixKg || Math.abs(prixKg-(Number(map.dernier_prix)||0))<0.005) continue;
+    let map = mappings.find(m=>m.produit_label===label);
+    if(!map){
+      // mapping proposé par l'OCR : clé valide, sinon ignoré si null, sinon à choisir
+      let ing = "";
+      if(l.ingredient && FC_INGREDIENTS[l.ingredient]) ing = l.ingredient;
+      else if(l.ingredient===null || l.ingredient==="null") ing = "__ignore";
+      const cont = (l.contenance && Number(l.contenance)>0) ? Number(l.contenance) : null;
       try{
-        await sbUpdate(T_MAP, map.id, {dernier_prix:prixKg, devise:ticket.devise, maj:todayISO()});
-        map.dernier_prix = prixKg; map.devise = ticket.devise;
-        await syncFoodCostPrice(map.ingredient, prixKg);
-        updated++;
-      }catch(e){}
-    }else if(!map){
-      try{
-        const [created] = await sbInsert(T_MAP, {produit_label:label, ingredient:"", dernier_prix:0, devise:ticket.devise, maj:todayISO()});
-        mappings.push(created);
-        newProd++;
-      }catch(e){}
+        const [created] = await sbInsert(T_MAP, {produit_label:label, ingredient:ing, dernier_prix:0, devise:"CHF", maj:todayISO(), poids_unite:cont});
+        mappings.push(created); map = created;
+        if(ing && ing!=="__ignore") newAuto++; else if(!ing) aVerifier++;
+      }catch(e){ continue; }
+    }
+    if(map.ingredient && map.ingredient!=="__ignore"){
+      if(prixBase(l, map)===null){ sansPoids++; continue; }
+      try{ if(await appliquerPrix(map, l, ticket)) updated++; }catch(e){}
     }
   }
-  let msg = [];
+  const msg = [];
   if(updated) msg.push(updated+" prix mis à jour dans tes fiches");
-  if(newProd) msg.push(newProd+" nouveau"+(newProd>1?"x":"")+" produit"+(newProd>1?"s":"")+" à mapper ⚙︎");
-  if(msg.length) toast(msg.join(" · "), updated?"ok":"err");
+  if(newAuto) msg.push(newAuto+" produit"+(newAuto>1?"s":"")+" reconnu"+(newAuto>1?"s":"")+" automatiquement");
+  if(aVerifier) msg.push(aVerifier+" à relier ⚙︎");
+  if(sansPoids) msg.push(sansPoids+" sans poids de paquet ⚙︎");
+  if(msg.length) toast(msg.join(" · "), (aVerifier||sansPoids)?"err":"ok");
   renderMappings();
 }
 
@@ -558,14 +612,14 @@ function showTab(name){
   document.getElementById("bigTotal").classList.toggle("hidden", name==="config");
   if(name==="list"){ renderList(); }
   if(name==="config"){ loadCfgFields(); renderMappings(); }
-  if(name==="export"){ fillMonths(); }
+  if(name==="export"){ fillMonths(); document.getElementById("fxRate").value = CFG.fx||0.94; }
   window.scrollTo({top:0});
 }
 
 /* =================== RENDUS =================== */
 function ticketMonths(){
   const s = new Set();
-  tickets.forEach(t=>{ const k=monthKey(t.date_ticket); if(k && k.length===7) s.add(k); });
+  tickets.forEach(t=>{ const k=ticketMonth(t); if(k && k.length===7) s.add(k); });
   const now = new Date().toISOString().slice(0,7);
   s.add(now);
   return [...s].sort().reverse();
@@ -584,17 +638,17 @@ function fillMonths(){
 function setMonth(m){ curMonth=m; renderAll(); }
 
 function renderHead(){
-  const list = tickets.filter(t=>monthKey(t.date_ticket)===curMonth && t.statut!=="verif");
+  const list = tickets.filter(t=>ticketMonth(t)===curMonth && t.statut!=="verif");
   const ch = list.filter(t=>t.pays==="CH").reduce((s,t)=>s+Number(t.total||0),0);
   const fr = list.filter(t=>t.pays==="FR").reduce((s,t)=>s+Number(t.total||0),0);
   document.getElementById("btLab").textContent = "Achats · " + monthLabel(curMonth);
-  document.getElementById("btVal").innerHTML = fmt(ch)+'<span class="cur">CHF</span>';
+  document.getElementById("btVal").innerHTML = fmt(ch + fr*(CFG.fx||0.94))+'<span class="cur">CHF</span>';
   document.getElementById("pCH").textContent = fmt(ch)+" CHF";
   document.getElementById("pFR").textContent = fmt(fr)+" EUR";
 }
 
 function renderList(){
-  const list = tickets.filter(t=>monthKey(t.date_ticket)===curMonth && t.statut!=="verif");
+  const list = tickets.filter(t=>ticketMonth(t)===curMonth && t.statut!=="verif");
   const box = document.getElementById("ticketList");
   const cat = document.getElementById("catBox");
 
@@ -647,7 +701,7 @@ async function syncFoodCostPrice(ingKey, newPrice){
     const rows = await r.json();
     let data = {ING:{},DS:{},BS:{},PACK:{}};
     if(rows.length>0 && rows[0].contenu) data = JSON.parse(rows[0].contenu);
-    data.ING[ingKey] = newPrice;
+    const g = fcGroup(ingKey); if(!data[g]) data[g] = {}; data[g][ingKey] = newPrice;
     await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA,{
       method:"POST",
       headers:Object.assign({},sbHeaders(),{"Prefer":"resolution=merge-duplicates"}),
@@ -669,7 +723,13 @@ function openSheet(id){
     <div class="who">${t.fournisseur} ${flag} ${warn}</div>
     <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
     <div class="amt num">${fmt(t.total)} <span class="cur">${t.devise}</span></div>
-    ${(t.lignes||[]).map((l,i)=>{const pu=l.unite==="kg"&&l.quantite>0?(l.total/l.quantite):l.prix_unitaire;const uLabel=l.unite==="kg"?"/kg":"/pce";return `<div class="sline" style="flex-wrap:wrap"><span style="flex:1">${l.designation}${l.quantite?` — ${l.quantite}${l.unite?" "+l.unite:""}`:""}</span><span class="num" style="margin-right:10px">${fmt(l.total)}</span><button onclick="supprimerLigne('${t.id}',${i})" style="background:none;border:none;color:#c44;font-size:18px;padding:0 4px;cursor:pointer">✕</button>${pu?`<div style="width:100%;font-size:11px;color:var(--muted);margin-top:2px">${fmt(pu)} ${t.devise||""}${uLabel}</div>`:""}</div>`;}).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
+    ${(t.lignes||[]).map((l,i)=>{const map=mappings.find(m=>m.produit_label===(l.designation||"").trim().toLowerCase());const pb=map&&map.ingredient&&map.ingredient!=="__ignore"?prixBase(l,map):null;const info=map?(map.ingredient==="__ignore"?"ignoré":map.ingredient?(pb?`→ ${FC_INGREDIENTS[map.ingredient]} · ${fmt(toCHF(pb,t.devise))} CHF/${fcUnit(map.ingredient)}`:`→ ${FC_INGREDIENTS[map.ingredient]} · <span style="color:#c44">poids de paquet manquant</span>`):`<span style="color:#c44">à relier ⚙︎</span>`):"";return `<div class="sline" style="flex-wrap:wrap;align-items:center">
+      <span style="flex:1 1 100%;margin-bottom:6px">${l.designation}</span>
+      <input type="number" step="0.01" inputmode="decimal" value="${l.quantite||""}" onchange="editLigne('${t.id}',${i},'quantite',this.value)" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right"> <span class="small" style="margin:0 8px 0 4px">${l.unite||"pce"}</span>
+      <input type="number" step="0.01" inputmode="decimal" value="${Number(l.total||0).toFixed(2)}" onchange="editLigne('${t.id}',${i},'total',this.value)" style="width:78px;padding:6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right;font-weight:600">
+      <button onclick="supprimerLigne('${t.id}',${i})" style="background:none;border:none;color:#c44;font-size:18px;padding:0 4px 0 10px;cursor:pointer">✕</button>
+      ${info?`<div style="width:100%;font-size:11px;color:var(--muted);margin-top:4px">${info}</div>`:""}
+    </div>`;}).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
     <label>Catégorie</label>
     <select onchange="editTicket('${t.id}','categorie',this.value)">
       ${["Matières premières","Packaging","Autre"].map(c=>`<option ${c===t.categorie?"selected":""}>${c}</option>`).join("")}
@@ -680,6 +740,8 @@ function openSheet(id){
       <option value="FR" ${t.pays==="FR"?"selected":""}>🇫🇷 France (EUR)</option>
     </select>
     ${t.statut==="verif" ? `<div style="margin-top:16px"><button class="btn btn-gold" onclick="markOk('${t.id}');closeSheet()">Marquer comme vérifié</button></div>`:""}
+    <div style="margin-top:14px"><button class="btn btn-line" onclick="voirPhoto('${t.id}')">Voir la photo du ticket</button></div>
+    <div id="photoBox" style="margin-top:10px"></div>
     <div style="margin-top:10px"><button class="btn btn-danger" onclick="delTicket('${t.id}')">Supprimer ce ticket</button></div>
   `;
   document.getElementById("sheetScrim").classList.remove("hidden");
@@ -695,8 +757,33 @@ function closeSheet(){
 }
 
 async function editTicket(id, field, val){
-  try{ await sbUpdate(T_ACHATS, id, {[field]:val}); const t=tickets.find(x=>x.id===id); if(t) t[field]=val; renderAll(); }
+  const patch = {[field]:val};
+  if(field==="pays") patch.devise = (val==="FR" ? "EUR" : "CHF");
+  try{ await sbUpdate(T_ACHATS, id, patch); const t=tickets.find(x=>x.id===id); if(t) Object.assign(t, patch); renderAll(); }
   catch(e){ toast("Modification non enregistrée (hors ligne ?)","err"); }
+}
+async function editLigne(ticketId, idx, field, val){
+  const t = tickets.find(x=>String(x.id)===String(ticketId));
+  if(!t || !t.lignes || !t.lignes[idx]) return;
+  const l = t.lignes[idx];
+  l[field] = Number(val)||0;
+  if(field==="quantite" && l.quantite>0) l.prix_unitaire = Number(l.total||0)/l.quantite;
+  t.total = t.lignes.reduce((s,x)=>s+Number(x.total||0), 0);
+  try{
+    await sbUpdate(T_ACHATS, t.id, {lignes:t.lignes, total:t.total});
+    const map = mappings.find(m=>m.produit_label===(l.designation||"").trim().toLowerCase());
+    if(map && map.ingredient && map.ingredient!=="__ignore" && prixBase(l,map)!==null){ try{ if(await appliquerPrix(map,l,t)) toast(`Prix ${FC_INGREDIENTS[map.ingredient]} mis à jour.`,"ok"); }catch(e){} }
+    openSheet(t.id); renderAll();
+  }catch(e){ toast("Modification non enregistrée (hors ligne ?)","err"); }
+}
+async function voirPhoto(id){
+  const box = document.getElementById("photoBox"); if(!box) return;
+  box.innerHTML = `<div class="small">Chargement…</div>`;
+  try{
+    const rows = await sbSelect(T_ACHATS, "select=photo&id=eq."+id);
+    const b64 = rows[0] && rows[0].photo;
+    box.innerHTML = b64 ? `<img src="data:image/jpeg;base64,${b64}" style="width:100%;border-radius:10px">` : `<div class="small">Pas de photo.</div>`;
+  }catch(e){ box.innerHTML = `<div class="small">Photo indisponible.</div>`; }
 }
 async function supprimerLigne(ticketId, idx){
   const t = tickets.find(x=>String(x.id)===String(ticketId));
@@ -716,36 +803,86 @@ async function delTicket(id){
   try{ await sbDelete(T_ACHATS, id); tickets = tickets.filter(t=>t.id!==id); closeSheet(); renderAll(); }
   catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
 }
-async function markOk(id){ await editTicket(id,"statut","ok"); }
+async function markOk(id){ await editTicket(id,"statut","ok"); const t=tickets.find(x=>x.id===id); if(t) await updateIngredientPrices(t); }
 
 /* =================== MAPPINGS =================== */
 function renderMappings(){
   const box = document.getElementById("mapList");
   if(mappings.length===0){ box.innerHTML=`<div class="small">Aucun produit scanné pour l'instant.</div>`; return; }
-  box.innerHTML = mappings.map(m=>{
-    let opts = '<option value="">— Choisir l\'ingrédient —</option>';
-    Object.keys(FC_INGREDIENTS).forEach(k=>{
-      opts += `<option value="${k}" ${m.ingredient===k?'selected':''}>${FC_INGREDIENTS[k]} (${k})</option>`;
-    });
-    return `<div class="mapcard">
-      <div class="plabel">${m.produit_label}</div>
-      <select onchange="saveMap('${m.id}', this.value)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--brd);background:var(--bg2);color:var(--txt);font-size:14px">
-        ${opts}
-      </select>
-      ${m.dernier_prix ? `<div class="small" style="margin-top:9px">Dernier prix : ${fmt(m.dernier_prix)} ${m.devise||""}/kg</div>`:""}
+  const rank = m => !m.ingredient ? 0 : (m.ingredient==="__ignore" ? 2 : 1);
+  const list = [...mappings].sort((a,b)=>rank(a)-rank(b) || a.produit_label.localeCompare(b.produit_label));
+  const nbTodo = mappings.filter(m=>!m.ingredient).length;
+  const head = nbTodo ? `<div style="margin-bottom:12px"><button class="btn btn-gold" onclick="suggererMappings()">✨ Relier automatiquement les ${nbTodo} produits restants</button></div>` : "";
+  box.innerHTML = head + list.map(m=>{
+    let opts = `<option value="">— À relier —</option><option value="__ignore" ${m.ingredient==="__ignore"?"selected":""}>✕ Ignorer (pas un ingrédient)</option>`;
+    Object.keys(FC_INGREDIENTS).forEach(k=>{ opts += `<option value="${k}" ${m.ingredient===k?"selected":""}>${FC_INGREDIENTS[k]} — /${fcUnit(k)}</option>`; });
+    const st = !m.ingredient ? `<span class="flag flag-warn">À RELIER</span>` : (m.ingredient==="__ignore" ? `<span class="flag">IGNORÉ</span>` : `<span class="flag flag-ch">OK</span>`);
+    return `<div class="mapcard" style="${m.ingredient==="__ignore"?"opacity:.55":""}">
+      <div class="plabel">${m.produit_label} ${st}</div>
+      <select onchange="saveMap('${m.id}', this.value)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--stroke);background:transparent;color:inherit;font-size:14px">${opts}</select>
+      ${m.ingredient && m.ingredient!=="__ignore" ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        <span class="small" style="flex:1">Contenance d'une unité achetée${fcUnit(m.ingredient)==="pièce"?" (nb de pièces)":" ("+fcUnit(m.ingredient)+")"}</span>
+        <input type="number" step="0.001" inputmode="decimal" value="${m.poids_unite||""}" placeholder="${fcUnit(m.ingredient)==="pièce"?"1":"ex. 0.25"}" onchange="saveMapPoids('${m.id}', this.value)" style="width:90px;padding:8px;border-radius:8px;border:1px solid ${m.poids_unite||fcUnit(m.ingredient)==="pièce"?"var(--stroke)":"#c44"};background:transparent;color:inherit;font-size:14px;text-align:right">
+      </div>`:""}
+      ${m.dernier_prix && m.ingredient && m.ingredient!=="__ignore" ? `<div class="small" style="margin-top:9px">Dernier prix appliqué : ${fmt(m.dernier_prix)} CHF/${fcUnit(m.ingredient)}</div>`:""}
     </div>`;
   }).join("");
 }
+async function suggererMappings(){
+  const todo = mappings.filter(m=>!m.ingredient);
+  if(!todo.length) return;
+  if(!CFG.apiKey){ toast("Clé API Anthropic manquante.","err"); return; }
+  showOverlay("Reconnaissance des produits…");
+  try{
+    const prompt = `Voici des libellés de tickets de caisse d'un restaurant. Pour chacun, donne la clé de l'ingrédient correspondant parmi : ${FC_LIST()}. Réponds UNIQUEMENT en JSON : {"<libellé>": {"cle": "<clé>" ou null, "contenance": nombre ou null}} — cle null si ce n'est aucun de ces ingrédients ; contenance = ce que contient une unité achetée dans l'unité de prix de l'ingrédient (kg, L, ou nb de pièces), d'après le libellé et les formats courants, null si inconnu.\nLibellés : ${JSON.stringify(todo.map(m=>m.produit_label))}`;
+    const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CFG.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,messages:[{role:"user",content:prompt}]})});
+    const data = await r.json();
+    const txt = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+    const res = JSON.parse(txt.replace(/```json|```/g,"").trim());
+    let n=0;
+    for(const m of todo){
+      const r = res[m.produit_label] || {};
+      const k = typeof r==="string" ? r : r.cle;
+      const ing = (k && FC_INGREDIENTS[k]) ? k : "__ignore";
+      const cont = (r && Number(r.contenance)>0) ? Number(r.contenance) : (m.poids_unite||null);
+      try{ await sbUpdate(T_MAP, m.id, {ingredient:ing, poids_unite:cont}); m.ingredient=ing; m.poids_unite=cont; n++; await reappliquer(m); }catch(e){}
+    }
+    hideOverlay(); toast(`✓ ${n} produits reliés. Vérifie et corrige si besoin.`,"ok"); renderMappings();
+  }catch(e){ hideOverlay(); toast("Reconnaissance impossible, réessaie.","err"); }
+}
+async function reappliquer(map){
+  // ré-applique le prix à partir du ticket le plus récent contenant ce produit
+  if(!map.ingredient || map.ingredient==="__ignore") return false;
+  for(const t of tickets){
+    if(t.statut==="verif") continue;
+    const l = (t.lignes||[]).find(x=>(x.designation||"").trim().toLowerCase()===map.produit_label);
+    if(l){ if(prixBase(l,map)===null) return false; try{ return await appliquerPrix(map,l,t); }catch(e){ return false; } }
+  }
+  return false;
+}
+async function saveMapPoids(id, val){
+  const v = Number(val)||null;
+  try{
+    await sbUpdate(T_MAP, id, {poids_unite:v}); const m=mappings.find(x=>x.id===id); if(m) m.poids_unite=v;
+    const ok = m ? await reappliquer(m) : false;
+    toast(ok?`✓ Prix ${FC_INGREDIENTS[m.ingredient]} recalculé.`:(v?"Contenance enregistrée.":"Contenance effacée."),"ok"); renderMappings();
+  }catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
+}
 async function saveMap(id, val){
-  try{ await sbUpdate(T_MAP, id, {ingredient:val.trim()}); const m=mappings.find(x=>x.id===id); if(m) m.ingredient=val.trim(); }
-  catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
+  try{
+    await sbUpdate(T_MAP, id, {ingredient:val.trim()}); const m=mappings.find(x=>x.id===id); if(m) m.ingredient=val.trim();
+    const ok = m ? await reappliquer(m) : false;
+    if(ok) toast(`✓ Prix ${FC_INGREDIENTS[m.ingredient]} mis à jour dans tes fiches.`,"ok");
+    renderMappings();
+  }catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
 }
 
 /* =================== EXPORT =================== */
 function doExport(){
   const m = document.getElementById("exportMonth").value;
-  const fx = Number(document.getElementById("fxRate").value)||0.94;
-  const list = tickets.filter(t=>monthKey(t.date_ticket)===m);
+  const fx = Number(document.getElementById("fxRate").value)||CFG.fx||0.94;
+  const list = tickets.filter(t=>ticketMonth(t)===m);
   if(list.length===0){
     document.getElementById("exportMsg").innerHTML=`<div class="msg msg-err">Aucun ticket sur ${monthLabel(m)}.</div>`;
     return;
@@ -790,16 +927,18 @@ function loadCfgFields(){
   document.getElementById("cfgSbUrl").value = CFG.sbUrl;
   document.getElementById("cfgSbKey").value = CFG.sbKey;
   document.getElementById("cfgApiKey").value = CFG.apiKey;
+  document.getElementById("cfgFx").value = CFG.fx || 0.94;
 }
 async function saveConfig(){
   CFG.sbUrl = document.getElementById("cfgSbUrl").value.trim().replace(/\/$/,"");
   CFG.sbKey = document.getElementById("cfgSbKey").value.trim();
   CFG.apiKey = document.getElementById("cfgApiKey").value.trim();
+  CFG.fx = Number(document.getElementById("cfgFx").value)||0.94;
   localStorage.setItem(LS, JSON.stringify(CFG));
   document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">Enregistré. Test de connexion…</div>`;
   try{
     await loadAll();
-    document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">✓ Connecté — ${tickets.length} tickets chargés.</div>`;
+    document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">✓ Connecté — ${tickets.length} tickets, ${mappings.length} produits connus.</div>`;
   }catch(e){
     document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-err">Connexion Supabase échouée : vérifie l'URL, la clé, et que les tables existent.</div>`;
   }
@@ -807,7 +946,7 @@ async function saveConfig(){
 
 /* =================== INIT =================== */
 async function loadAll(){
-  tickets = await sbSelect(T_ACHATS, "select=*&order=created_at.desc&limit=1000");
+  tickets = await sbSelect(T_ACHATS, "select=id,date_ticket,fournisseur,pays,devise,categorie,total,lignes,statut,created_at&order=created_at.desc&limit=1000");
   try{ mappings = await sbSelect(T_MAP, "select=*"); }catch(e){ mappings=[]; }
   renderAll();
 }
