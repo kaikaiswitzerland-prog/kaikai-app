@@ -222,10 +222,9 @@
 
   .mapcard{background:var(--s1);border:1px solid var(--stroke);border-radius:var(--r);padding:15px 16px;margin-bottom:9px}
   .mapcard .plabel{font-weight:600;font-size:13.5px;margin-bottom:9px}
-</style>
-</head>
+  input[type="search"]{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--stroke);background:var(--s1);color:var(--text);font-size:15px}
+  </style>
 <body>
-
 <header>
   <div class="toprow">
     <div class="wordmark">KAÏKAÏ <span>/ ACHATS</span></div>
@@ -245,56 +244,60 @@
 
 <main>
 
-<section id="view-list">
+<section id="view-prix">
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <input type="search" id="prixSearch" placeholder="Rechercher un produit…" oninput="renderPrix()" style="flex:1">
+  </div>
+  <div id="prixList"></div>
+</section>
+
+<section id="view-list" class="hidden">
   <div id="verifBlock" class="hidden">
     <h2>À vérifier</h2>
     <div id="verifList"></div>
   </div>
-
-  <div id="catBox"></div>
   <div id="ticketList"></div>
+</section>
+
+<section id="view-depenses" class="hidden">
+  <div style="margin-bottom:14px"><button class="btn btn-gold" onclick="ouvrirAjoutDepense()">+ Ajouter une dépense</button></div>
+  <div id="depList"></div>
 </section>
 
 <section id="view-export" class="hidden">
   <h2>Export du mois</h2>
   <label>Mois</label>
   <select id="exportMonth"></select>
-  <label>Taux EUR → CHF (moyenne du mois)</label>
+  <label>Taux EUR → CHF</label>
   <input type="number" id="fxRate" step="0.0001" value="0.9400" inputmode="decimal">
   <div style="margin-top:18px">
     <button class="btn btn-gold" onclick="doExport()">Télécharger le CSV</button>
   </div>
-  <div class="small" style="margin-top:12px">
-    Deux blocs séparés : fournisseurs Suisse (CHF) et France (EUR converti au taux saisi). Prêt pour ta compta.
-  </div>
+  <div class="small" style="margin-top:12px">Une ligne par article : date, fournisseur, produit, quantité, total, prix unitaire, prix/kg. Fournisseurs suisses et français séparés.</div>
   <div id="exportMsg"></div>
 </section>
 
 <section id="view-config" class="hidden">
-  <h2>Connexions</h2>
-  <label>Supabase — URL du projet</label>
-  <input type="text" id="cfgSbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
-  <label>Supabase — clé anon</label>
-  <input type="password" id="cfgSbKey" placeholder="eyJ...">
+  <h2>Réglages</h2>
   <label>Clé API Anthropic (lecture des photos)</label>
   <input type="password" id="cfgApiKey" placeholder="sk-ant-...">
-  <label>Taux EUR → CHF (pour convertir les tickets France)</label>
+  <label>Taux EUR → CHF</label>
   <input type="number" id="cfgFx" step="0.0001" value="0.9400" inputmode="decimal">
   <div style="margin-top:18px">
     <button class="btn btn-line" onclick="saveConfig()">Enregistrer et tester</button>
   </div>
   <div id="cfgMsg"></div>
-  <h2>Produits → ingrédients</h2>
-  <div class="small" style="margin-bottom:12px">
-    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, l'app reconnaît les produits toute seule et envoie les prix réels (en CHF) dans l'onglet « Réel » de l'appli food cost — tes fiches ne sont jamais modifiées automatiquement. Vérifie ici les rares cas où elle s'est trompée.
-  </div>
-  <div id="mapList"></div>
+  <div class="small" style="margin-top:20px">La base de données est intégrée. Seule la clé Anthropic est à saisir sur chaque appareil.</div>
 </section>
 
 </main>
 
 <nav>
-  <button class="navbtn active" id="tab-list" onclick="showTab('list')">
+  <button class="navbtn active" id="tab-prix" onclick="showTab('prix')">
+    <svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h16"/></svg>
+    <span class="lbl">Prix</span>
+  </button>
+  <button class="navbtn" id="tab-list" onclick="showTab('list')">
     <svg viewBox="0 0 24 24"><path d="M5 3h14v18l-2.5-1.6L14 21l-2-1.4L10 21l-2.5-1.6L5 21V3z"/><path d="M9 8h6M9 12h6"/></svg>
     <span class="lbl">Tickets</span>
   </button>
@@ -304,677 +307,338 @@
     </button>
     <div class="shutterlbl">Scanner</div>
   </div>
+  <button class="navbtn" id="tab-depenses" onclick="showTab('depenses')">
+    <svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15v-4M12 15V8M16 15v-6"/></svg>
+    <span class="lbl">Dépenses</span>
+  </button>
   <button class="navbtn" id="tab-export" onclick="showTab('export')">
-    <svg viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 15v5h16v-5"/></svg>
+    <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
     <span class="lbl">Export</span>
   </button>
 </nav>
-
 <input type="file" id="photoInput" accept="image/*" capture="environment" class="hidden">
 
 <div id="sheetScrim" class="sheet-scrim hidden" onclick="closeSheet()"></div>
-<div id="sheet" class="sheet"></div>
-
-<div id="overlay" class="overlay hidden">
-  <div class="ring"></div>
-  <div class="txt" id="overlayTxt">Lecture du ticket…</div>
-</div>
-
+<div id="sheet" class="sheet" onclick="event.stopPropagation()"></div>
 <div id="toast" class="hidden"></div>
+<div id="overlay" class="overlay hidden"><div class="spin"></div><div class="txt" id="overlayTxt">Lecture du ticket…</div></div>
 
 <script>
 /* =================== CONFIG =================== */
 const LS = "kaikai_achats_cfg";
-const SB_DEFAULT_URL = "https://ybcrabfzzwezvzkxprdl.supabase.co";
-const SB_DEFAULT_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliY3JhYmZ6endlenZ6a3hwcmRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NDg4NzksImV4cCI6MjA5OTUyNDg3OX0.2DkBTk_IFZMrAfEpZC1mL3lubG7v5ywp0JXk52LNHtg";
-let CFG = { sbUrl:SB_DEFAULT_URL, sbKey:SB_DEFAULT_KEY, apiKey:"", fx:0.94 };
+const SB_URL = "https://ybcrabfzzwezvzkxprdl.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InliY3JhYmZ6endlenZ6a3hwcmRsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM5NDg4NzksImV4cCI6MjA5OTUyNDg3OX0.2DkBTk_IFZMrAfEpZC1mL3lubG7v5ywp0JXk52LNHtg";
+let CFG = { apiKey:"", fx:0.94 };
 try { Object.assign(CFG, JSON.parse(localStorage.getItem(LS)||"{}")); } catch(e){}
-if(!CFG.sbUrl) CFG.sbUrl = SB_DEFAULT_URL; if(!CFG.sbKey) CFG.sbKey = SB_DEFAULT_KEY;
-
-const T_ACHATS = "kaikai_achats";
-const T_MAP = "kaikai_achats_map";
-const T_DATA = "kaikai_data";
-const SK_PRICES = "kaikaikGeneva_prices_reel"; // espace séparé : ne touche jamais aux prix des fiches
-// Clés ingrédients food cost (pour le dropdown de mapping)
-let FC_INGREDIENTS = {
-  thon:"Thon rouge",poulet:"Poulet",porc:"Porc rôti",boeuf:"Bœuf",
-  salade:"Salade verte",chouB:"Chou blanc",chouR:"Chou rouge",tomates:"Tomates",
-  concombre:"Concombre",carottes:"Carottes",champignons:"Champignons",oignon:"Oignon",
-  patate:"Patate",patatdouce:"Patate douce",mangue:"Mangue",ananas:"Ananas",
-  avocat:"Avocat",riz:"Riz",nouilles:"Nouilles chinoises",cacahuetes:"Cacahuètes",
-  sesame:"Graines de sésame",oeufs:"Œufs",laitCoco:"Lait de coco",
-  huileSesameLiq:"Huile de sésame",sauceDozo:"Sauce Dozo maison",
-  sauceArachide:"Sauce arachide",huileArachide:"Huile d'arachide",
-  ailGingembre:"Pâte ail/gingembre",cremeEntiere:"Crème entière 35%",
-  gelatine:"Gélatine",sucre:"Sucre blanc",sucreCanne:"Sucre de canne",
-  boudoir:"Boudoirs",fruitRouges:"Fruits rouges congelés",citron:"Citron",
-  banane:"Banane mûre",perlesJapon:"Perles du Japon",crumble:"Crumble maison",
-  gingembreConfit:"Gingembre confit rose",
-  eau:"Eau plate/gazeuse (boisson vendue)", jus:"Jus exotiques (boisson vendue)",
-  coulant:"Coulant au chocolat (dessert acheté)", cheesecake:"Cheesecake (dessert acheté)"
-};
-let FC_UNIT = { laitCoco:"L", huileSesameLiq:"L", sauceDozo:"L", sauceArachide:"L", huileArachide:"L", cremeEntiere:"L", avocat:"pièce", gelatine:"feuille", eau:"pièce", jus:"pièce", coulant:"pièce", cheesecake:"pièce" };
-const FC_GROUP = { eau:"BS", jus:"BS", coulant:"DS", cheesecake:"DS" };
-const fcUnit = k => FC_UNIT[k] || "kg";
-const fcGroup = k => FC_GROUP[k] || "ING";
-const FC_LIST = () => Object.keys(FC_INGREDIENTS).map(k=>`${k} (${FC_INGREDIENTS[k]}, prix par ${fcUnit(k)})`).join(", ");
+const T = "kaikai_achats";
 const TIMEOUT = 20000;
-
 let tickets = [];
-let mappings = [];
 let curMonth = new Date().toISOString().slice(0,7);
 
 /* =================== UTILS =================== */
 const fmt = n => (Number(n)||0).toLocaleString("fr-CH",{minimumFractionDigits:2,maximumFractionDigits:2});
-const monthKey = d => {
-  const m = String(d||"").match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/);
-  if(!m) return "";
-  let y = m[3]; if(y.length===2) y = "20"+y;
-  return y+"-"+m[2].padStart(2,"0");
-};
+const monthKey = d => { const m=String(d||"").match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$/); if(!m) return ""; let y=m[3]; if(y.length===2) y="20"+y; return y+"-"+m[2].padStart(2,"0"); };
 const ticketMonth = t => monthKey(t.date_ticket) || String(t.created_at||"").slice(0,7);
 const todayISO = () => new Date().toISOString();
-const monthLabel = m => {
-  const [y,mo] = m.split("-");
-  const noms=["janv","fév","mars","avr","mai","juin","juil","août","sept","oct","nov","déc"];
-  return `${noms[Number(mo)-1]} ${y.slice(2)}`;
-};
+const monthLabel = m => { const [y,mo]=m.split("-"); const n=["janv","fév","mars","avr","mai","juin","juil","août","sept","oct","nov","déc"]; return `${n[Number(mo)-1]} ${y.slice(2)}`; };
+const toCHF = (p,dev) => dev==="EUR" ? p*(CFG.fx||0.94) : p;
+function fetchTO(url, opts){ return Promise.race([fetch(url,opts), new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),TIMEOUT))]); }
+const esc = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;");
 
-function fetchTO(url, opts){
-  return Promise.race([
-    fetch(url, opts),
-    new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),TIMEOUT))
-  ]);
+// prix unitaire dans l'unité de référence : CHF/kg, CHF/L ou CHF/pièce
+function prixRef(l){
+  const tot=Number(l.total)||0, q=Number(l.quantite)||0;
+  if(!tot) return null;
+  const cont = Number(l.contenance)||0; // kg ou L par unité, saisi à la main si besoin
+  if(l.unite==="kg" && q>0) return {v:tot/q, u:"kg"};
+  if(l.unite==="g"  && q>0) return {v:tot/(q/1000), u:"kg"};
+  if(l.unite==="l"  && q>0) return {v:tot/q, u:"L"};
+  if(l.unite==="ml" && q>0) return {v:tot/(q/1000), u:"L"};
+  if(cont>0 && q>0) return {v:tot/(q*cont), u:(l.cont_unite==="L"?"L":"kg")};
+  if(q>0) return {v:tot/q, u:"pce"};
+  return null;
 }
 
 /* =================== SUPABASE =================== */
-function sbHeaders(){
-  return { "apikey":CFG.sbKey, "Authorization":"Bearer "+CFG.sbKey, "Content-Type":"application/json", "Prefer":"return=representation" };
-}
-async function sbSelect(table, query){
-  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}?${query||"select=*"}`, {headers:sbHeaders()});
-  if(!r.ok) throw new Error("Supabase "+r.status);
-  return r.json();
-}
-async function sbInsert(table, row){
-  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}`, {method:"POST",headers:sbHeaders(),body:JSON.stringify(row)});
-  if(!r.ok) throw new Error("Supabase "+r.status);
-  return r.json();
-}
-async function sbUpdate(table, id, patch){
-  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}?id=eq.${id}`, {method:"PATCH",headers:sbHeaders(),body:JSON.stringify(patch)});
-  if(!r.ok) throw new Error("Supabase "+r.status);
-  return r.json();
-}
-async function sbDelete(table, id){
-  const r = await fetchTO(`${CFG.sbUrl}/rest/v1/${table}?id=eq.${id}`, {method:"DELETE",headers:sbHeaders()});
-  if(!r.ok) throw new Error("Supabase "+r.status);
-}
+function sbH(){ return { "apikey":SB_KEY, "Authorization":"Bearer "+SB_KEY, "Content-Type":"application/json", "Prefer":"return=representation" }; }
+async function sbSelect(q){ const r=await fetchTO(`${SB_URL}/rest/v1/${T}?${q}`,{headers:sbH()}); if(!r.ok) throw new Error("Supabase "+r.status); return r.json(); }
+async function sbInsert(row){ const r=await fetchTO(`${SB_URL}/rest/v1/${T}`,{method:"POST",headers:sbH(),body:JSON.stringify(row)}); if(!r.ok) throw new Error("Supabase "+r.status); return r.json(); }
+async function sbUpdate(id,patch){ const r=await fetchTO(`${SB_URL}/rest/v1/${T}?id=eq.${id}`,{method:"PATCH",headers:sbH(),body:JSON.stringify(patch)}); if(!r.ok) throw new Error("Supabase "+r.status); return r.json(); }
+async function sbDelete(id){ const r=await fetchTO(`${SB_URL}/rest/v1/${T}?id=eq.${id}`,{method:"DELETE",headers:sbH()}); if(!r.ok) throw new Error("Supabase "+r.status); }
 
-/* =================== PHOTO =================== */
+/* =================== PHOTO + OCR =================== */
 function compressPhoto(file){
   return new Promise((res,rej)=>{
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = ()=>{
-      const MAX = 1280;
-      let w=img.width, h=img.height;
-      if(Math.max(w,h)>MAX){ const k=MAX/Math.max(w,h); w=Math.round(w*k); h=Math.round(h*k); }
-      const c = document.createElement("canvas"); c.width=w; c.height=h;
-      c.getContext("2d").drawImage(img,0,0,w,h);
-      URL.revokeObjectURL(url);
-      res(c.toDataURL("image/jpeg",0.7).split(",")[1]);
-    };
-    img.onerror = ()=>rej(new Error("image"));
-    img.src = url;
+    const img=new Image(); const url=URL.createObjectURL(file);
+    img.onload=()=>{ const MAX=1280; let w=img.width,h=img.height; if(Math.max(w,h)>MAX){const k=MAX/Math.max(w,h);w=Math.round(w*k);h=Math.round(h*k);} const c=document.createElement("canvas");c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);URL.revokeObjectURL(url);res(c.toDataURL("image/jpeg",0.7).split(",")[1]); };
+    img.onerror=()=>rej(new Error("image")); img.src=url;
   });
 }
-
-/* =================== OCR =================== */
 async function readTicket(b64){
-  const prompt = `Tu lis un justificatif d'achat photographié : ticket de caisse, facture A4 ou bulletin de livraison (contexte : restaurant en Suisse, achats en Suisse en CHF ou en France en EUR).
+  const prompt = `Tu lis un justificatif d'achat photographié : ticket de caisse, facture ou bulletin de livraison (restaurant en Suisse ; achats en Suisse en CHF ou en France en EUR).
 Réponds UNIQUEMENT avec un objet JSON valide, sans backticks, sans texte autour :
 {
  "fournisseur":"string",
  "pays":"CH"|"FR",
  "devise":"CHF"|"EUR",
  "date":"JJ.MM.AAAA ou vide",
- "lignes":[{"designation":"string","quantite":nombre,"unite":"pce|kg|g|l|ml ou vide","prix_unitaire":nombre,"total":nombre,"ingredient":"clé ou null","contenance":nombre ou null}],
- "total_ticket":nombre,
- "categorie":"Matières premières"|"Packaging"|"Autre"
+ "lignes":[{"designation":"string","quantite":nombre,"unite":"pce|kg|g|l|ml ou vide","prix_unitaire":nombre,"total":nombre,"contenance":nombre ou null,"cont_unite":"kg"|"L"|null}],
+ "total_ticket":nombre
 }
-Pour chaque ligne, "ingredient" = la clé de l'ingrédient de la cuisine correspondant, choisie dans cette liste : ${FC_LIST()}. Mets null si la ligne n'est aucun de ces ingrédients (eau en bouteille, produits ménagers, achats perso, etc.). "contenance" = ce que contient UNE unité achetée, exprimé dans l'unité de prix de l'ingrédient : en kg ou L pour un paquet/bouteille (ex : paquet de nouilles 250 g → 0.25 ; bouteille de lait de coco 400 ml → 0.4), en nombre de pièces pour un lot d'articles vendus à la pièce (ex : "pack 6x50cl" d'eau → 6). Utilise le libellé et ta connaissance des formats courants du produit ; si la ligne est déjà au poids (unite kg/g/l/ml) ou si tu ne sais pas, null.
-Règles : point décimal. Le pays se déduit de la devise, de l'adresse ou du n° de TVA. Ignore les lignes non-marchandise (fidélité, "montant dû" répété, rendu monnaie). Nourriture/boissons = Matières premières ; barquettes, sacs, contenants = Packaging ; le reste = Autre. Champ illisible : 0 ou "". Si l'image n'est pas un justificatif d'achat : {"erreur":"pas un ticket"}.`;
-  const r = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",
-    headers:{
-      "Content-Type":"application/json",
-      "x-api-key":CFG.apiKey,
-      "anthropic-version":"2023-06-01",
-      "anthropic-dangerous-direct-browser-access":"true"
-    },
-    body:JSON.stringify({
-      model:"claude-sonnet-4-6",
-      max_tokens:2500,
-      messages:[{role:"user",content:[
-        {type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},
-        {type:"text",text:prompt}
-      ]}]
-    })
-  });
+Règles : point décimal. Le pays se déduit de la devise, de l'adresse ou du n° de TVA. Ignore les lignes non-marchandise (fidélité, montant dû répété, rendu monnaie). Champ illisible : 0 ou "". Pour un article vendu à la pièce ou au paquet, "contenance" = poids net (kg) ou volume (L) d'UNE unité si le libellé ou le ticket l'indique clairement (ex : "6x50cl" → 3, "L" ; "250g" → 0.25, "kg"), sinon null. Si l'image n'est pas un justificatif d'achat : {"erreur":"pas un ticket"}.`;
+  const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CFG.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:2500,messages:[{role:"user",content:[{type:"image",source:{type:"base64",media_type:"image/jpeg",data:b64}},{type:"text",text:prompt}]}]})});
   if(!r.ok) throw new Error("API "+r.status);
-  const data = await r.json();
-  const txt = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  const data=await r.json();
+  const txt=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
   return JSON.parse(txt.replace(/```json|```/g,"").trim());
 }
 
-/* =================== FLUX SCAN =================== */
 document.getElementById("photoInput").addEventListener("change", async e=>{
-  const file = e.target.files?.[0];
-  e.target.value = "";
-  if(!file) return;
-  if(!CFG.apiKey || !CFG.sbUrl || !CFG.sbKey){
-    toast("Configure d'abord tes clés dans les réglages ⚙︎.","err");
-    showTab("config");
-    return;
-  }
+  const file=e.target.files?.[0]; e.target.value=""; if(!file) return;
+  if(!CFG.apiKey){ toast("Colle d'abord ta clé Anthropic dans ⚙︎.","err"); showTab("config"); return; }
   showOverlay("Lecture du ticket…");
-  if(navigator.vibrate) navigator.vibrate(10);
-  let b64;
-  try{ b64 = await compressPhoto(file); }
-  catch(err){ hideOverlay(); toast("Photo illisible, réessaie.","err"); return; }
-
-  let parsed = null, statut = "ok";
-  try{
-    parsed = await readTicket(b64);
-    if(parsed.erreur) statut = "verif";
-  }catch(err){
-    const s = String(err && err.message || "");
-    if(/API 401/.test(s)){ hideOverlay(); toast("Clé API Anthropic refusée — vérifie-la dans ⚙︎.","err"); showTab("config"); return; }
+  let b64; try{ b64=await compressPhoto(file); }catch(err){ hideOverlay(); toast("Photo illisible, réessaie.","err"); return; }
+  let parsed=null, statut="ok";
+  try{ parsed=await readTicket(b64); if(parsed.erreur) statut="verif"; }
+  catch(err){
+    const s=String(err&&err.message||"");
+    if(/API 401/.test(s)){ hideOverlay(); toast("Clé API refusée — vérifie-la dans ⚙︎.","err"); showTab("config"); return; }
     if(/API 4(00|02)/.test(s)){ hideOverlay(); toast("Crédit API épuisé — recharge sur console.anthropic.com.","err"); return; }
-    statut = "verif";
+    statut="verif";
   }
-  // Doublon probable ?
   if(parsed && !parsed.erreur){
-    const dup = tickets.find(t=>t.fournisseur===parsed.fournisseur && t.date_ticket===(parsed.date||"") && Math.abs(Number(t.total)-Number(parsed.total_ticket||0))<0.01);
+    const dup=tickets.find(t=>t.fournisseur===parsed.fournisseur && t.date_ticket===(parsed.date||"") && Math.abs(Number(t.total)-Number(parsed.total_ticket||0))<0.01);
     if(dup && !confirm(`Un ticket ${parsed.fournisseur} du ${parsed.date} de ${fmt(parsed.total_ticket)} existe déjà. L'enregistrer quand même ?`)){ hideOverlay(); return; }
   }
-
-  const row = {
-    date_ticket: parsed?.date || "",
-    fournisseur: parsed?.fournisseur || "À identifier",
-    pays: parsed?.pays==="FR" ? "FR" : "CH",
-    devise: parsed?.devise==="EUR" ? "EUR" : "CHF",
-    categorie: ["Matières premières","Packaging","Autre"].includes(parsed?.categorie) ? parsed.categorie : "Autre",
-    total: Number(parsed?.total_ticket)||0,
-    lignes: Array.isArray(parsed?.lignes) ? parsed.lignes : [],
-    photo: b64,
-    statut,
-    created_at: todayISO()
-  };
-
+  const row={ date_ticket:parsed?.date||"", fournisseur:parsed?.fournisseur||"À identifier", pays:parsed?.pays==="FR"?"FR":"CH", devise:parsed?.devise==="EUR"?"EUR":"CHF",
+    categorie:"Autre", total:Number(parsed?.total_ticket)||0, lignes:Array.isArray(parsed?.lignes)?parsed.lignes.map(l=>({designation:l.designation||"",quantite:Number(l.quantite)||0,unite:l.unite||"",prix_unitaire:Number(l.prix_unitaire)||0,total:Number(l.total)||0,contenance:Number(l.contenance)||null,cont_unite:l.cont_unite||null})):[],
+    photo:b64, statut, created_at:todayISO() };
   showOverlay("Enregistrement…");
   try{
-    const [saved] = await sbInsert(T_ACHATS, row);
-    tickets.unshift(saved);
-    hideOverlay();
-    if(navigator.vibrate) navigator.vibrate(statut==="ok"?[15,40,15]:60);
-    if(statut==="verif"){
-      toast("Enregistré mais lecture incomplète → file « À vérifier ».","err");
-    }else{
-      toast(`✓ ${row.fournisseur} — ${fmt(row.total)} ${row.devise}. Tu peux jeter le ticket.`,"ok");
-      await updateIngredientPrices(saved);
-    }
-    const mk = ticketMonth(saved);
-    if(mk && mk.length===7) curMonth = mk;
-    showTab("list");
-    renderAll();
-  }catch(err){
-    hideOverlay();
-    toast("Hors ligne ou erreur base — ticket NON enregistré. Garde le papier.","err");
-  }
+    const [saved]=await sbInsert(row); delete saved.photo; tickets.unshift(saved); hideOverlay();
+    if(statut==="verif") toast("Enregistré mais lecture incomplète → « À vérifier ».","err");
+    else toast(`✓ ${row.fournisseur} — ${fmt(row.total)} ${row.devise} · ${row.lignes.length} articles.`,"ok");
+    const mk=ticketMonth(saved); if(mk&&mk.length===7) curMonth=mk;
+    showTab("prix"); renderAll();
+  }catch(err){ hideOverlay(); toast("Erreur base — ticket NON enregistré. Garde le papier.","err"); }
 });
 
-function toast(txt, type){
-  const t = document.getElementById("toast");
-  t.className = "toast toast-"+(type==="ok"?"ok":"err");
-  t.textContent = txt;
-  clearTimeout(t._to);
-  t._to = setTimeout(()=>{ t.className="hidden"; }, 5000);
-}
+/* =================== UI =================== */
+function toast(txt,type){ const t=document.getElementById("toast"); t.className="toast toast-"+(type==="ok"?"ok":"err"); t.textContent=txt; clearTimeout(t._to); t._to=setTimeout(()=>{t.className="hidden";},5000); }
 function showOverlay(t){ document.getElementById("overlayTxt").textContent=t; document.getElementById("overlay").classList.remove("hidden"); }
 function hideOverlay(){ document.getElementById("overlay").classList.add("hidden"); }
-
-/* =================== MAJ PRIX INGRÉDIENTS =================== */
-function prixBase(l, map){
-  // prix dans l'unité de l'ingrédient food cost (kg / L / pièce)
-  const tot = Number(l.total)||0, q = Number(l.quantite)||0;
-  if(!tot || !q) return null;
-  if(l.unite==="kg" || l.unite==="l")  return tot/q;
-  if(l.unite==="g"  || l.unite==="ml") return tot/(q/1000);
-  // vendu à la pièce / au paquet : il faut la contenance d'une unité
-  const cont = Number(map.poids_unite) || 0;
-  if(cont>0) return tot/(q*cont);
-  if(fcUnit(map.ingredient)==="pièce") return tot/q; // 1 unité = 1 pièce
-  return null;
-}
-function toCHF(prix, devise){ return devise==="EUR" ? prix*(CFG.fx||0.94) : prix; }
-async function appliquerPrix(map, l, ticket){
-  const p = prixBase(l, map);
-  if(!p) return false;
-  const pCHF = toCHF(p, ticket.devise);
-  if(Math.abs(pCHF-(Number(map.dernier_prix)||0))<0.005) return false;
-  await sbUpdate(T_MAP, map.id, {dernier_prix:pCHF, devise:"CHF", maj:todayISO()});
-  map.dernier_prix = pCHF; map.devise = "CHF";
-  await syncFoodCostPrice(map.ingredient, Number(pCHF.toFixed(3)), {label:map.produit_label, fournisseur:ticket.fournisseur, date_ticket:ticket.date_ticket, devise_source:ticket.devise, prix_source:Number(p.toFixed(3))});
-  return true;
-}
-async function updateIngredientPrices(ticket){
-  let updated = 0, newAuto = 0, aVerifier = 0, sansPoids = 0;
-  for(const l of (ticket.lignes||[])){
-    const label = (l.designation||"").trim().toLowerCase();
-    if(!label) continue;
-    let map = mappings.find(m=>m.produit_label===label);
-    if(!map){
-      // mapping proposé par l'OCR : clé valide, sinon ignoré si null, sinon à choisir
-      let ing = "";
-      if(l.ingredient && FC_INGREDIENTS[l.ingredient]) ing = l.ingredient;
-      else if(l.ingredient===null || l.ingredient==="null") ing = "__ignore";
-      const cont = (l.contenance && Number(l.contenance)>0) ? Number(l.contenance) : null;
-      try{
-        const [created] = await sbInsert(T_MAP, {produit_label:label, ingredient:ing, dernier_prix:0, devise:"CHF", maj:todayISO(), poids_unite:cont});
-        mappings.push(created); map = created;
-        if(ing && ing!=="__ignore") newAuto++; else if(!ing) aVerifier++;
-      }catch(e){ continue; }
-    }
-    if(map.ingredient && map.ingredient!=="__ignore"){
-      if(prixBase(l, map)===null){ sansPoids++; continue; }
-      try{ if(await appliquerPrix(map, l, ticket)) updated++; }catch(e){}
-    }
-  }
-  const msg = [];
-  if(updated) msg.push(updated+" prix réels envoyés au food cost");
-  if(newAuto) msg.push(newAuto+" produit"+(newAuto>1?"s":"")+" reconnu"+(newAuto>1?"s":"")+" automatiquement");
-  if(aVerifier) msg.push(aVerifier+" à relier ⚙︎");
-  if(sansPoids) msg.push(sansPoids+" sans poids de paquet ⚙︎");
-  if(msg.length) toast(msg.join(" · "), (aVerifier||sansPoids)?"err":"ok");
-  renderMappings();
-}
-
-/* =================== NAVIGATION =================== */
 function showTab(name){
-  ["list","export","config"].forEach(t=>{
-    document.getElementById("view-"+t).classList.toggle("hidden", t!==name);
-    const btn = document.getElementById("tab-"+t);
-    if(btn) btn.classList.toggle("active", t===name);
-  });
-  document.getElementById("monthChips").classList.toggle("hidden", name!=="list");
-  document.getElementById("bigTotal").classList.toggle("hidden", name==="config");
-  if(name==="list"){ renderList(); }
-  if(name==="config"){ loadCfgFields(); renderMappings(); }
-  if(name==="export"){ fillMonths(); document.getElementById("fxRate").value = CFG.fx||0.94; }
+  ["prix","list","depenses","export","config"].forEach(t=>{ document.getElementById("view-"+t).classList.toggle("hidden",t!==name); const b=document.getElementById("tab-"+t); if(b) b.classList.toggle("active",t===name); });
+  document.getElementById("monthChips").classList.toggle("hidden", name==="config"||name==="depenses");
+  document.getElementById("bigTotal").classList.toggle("hidden", name==="config"||name==="depenses");
+  if(name==="prix") renderPrix();
+  if(name==="list") renderList();
+  if(name==="depenses") renderDepenses();
+  if(name==="config"){ document.getElementById("cfgApiKey").value=CFG.apiKey; document.getElementById("cfgFx").value=CFG.fx||0.94; }
+  if(name==="export"){ fillMonths(); document.getElementById("fxRate").value=CFG.fx||0.94; }
   window.scrollTo({top:0});
 }
-
-/* =================== RENDUS =================== */
-function ticketMonths(){
-  const s = new Set();
-  tickets.forEach(t=>{ const k=ticketMonth(t); if(k && k.length===7) s.add(k); });
-  const now = new Date().toISOString().slice(0,7);
-  s.add(now);
-  return [...s].sort().reverse();
-}
+function ticketMonths(){ const s=new Set(); tickets.forEach(t=>{const k=ticketMonth(t); if(k&&k.length===7) s.add(k);}); s.add(new Date().toISOString().slice(0,7)); return [...s].sort().reverse(); }
 function fillMonths(){
-  const ms = ticketMonths();
-  const sel = document.getElementById("exportMonth");
-  const cur = sel.value;
-  sel.innerHTML = ms.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join("");
-  if(ms.includes(cur)) sel.value = cur;
-  const chips = document.getElementById("monthChips");
-  chips.innerHTML = ms.map(m=>
-    `<button class="chip ${m===curMonth?"active":""}" onclick="setMonth('${m}')">${monthLabel(m)}</button>`
-  ).join("");
+  const ms=ticketMonths(); const sel=document.getElementById("exportMonth"); const cur=sel.value;
+  sel.innerHTML=ms.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join(""); if(ms.includes(cur)) sel.value=cur;
+  document.getElementById("monthChips").innerHTML=ms.map(m=>`<button class="chip ${m===curMonth?"active":""}" onclick="setMonth('${m}')">${monthLabel(m)}</button>`).join("");
 }
 function setMonth(m){ curMonth=m; renderAll(); }
-
+function monthTickets(){ return tickets.filter(t=>ticketMonth(t)===curMonth && t.statut!=="verif"); }
 function renderHead(){
-  const list = tickets.filter(t=>ticketMonth(t)===curMonth && t.statut!=="verif");
-  const ch = list.filter(t=>t.pays==="CH").reduce((s,t)=>s+Number(t.total||0),0);
-  const fr = list.filter(t=>t.pays==="FR").reduce((s,t)=>s+Number(t.total||0),0);
-  document.getElementById("btLab").textContent = "Achats · " + monthLabel(curMonth);
-  document.getElementById("btVal").innerHTML = fmt(ch + fr*(CFG.fx||0.94))+'<span class="cur">CHF</span>';
-  document.getElementById("pCH").textContent = fmt(ch)+" CHF";
-  document.getElementById("pFR").textContent = fmt(fr)+" EUR";
+  const list=monthTickets();
+  const ch=list.filter(t=>t.pays==="CH").reduce((s,t)=>s+Number(t.total||0),0);
+  const fr=list.filter(t=>t.pays==="FR").reduce((s,t)=>s+Number(t.total||0),0);
+  document.getElementById("btLab").textContent="Achats · "+monthLabel(curMonth);
+  document.getElementById("btVal").innerHTML=fmt(ch+fr*(CFG.fx||0.94))+'<span class="cur">CHF</span>';
+  document.getElementById("pCH").textContent=fmt(ch)+" CHF"; document.getElementById("pFR").textContent=fmt(fr)+" EUR";
 }
 
-function renderList(){
-  const list = tickets.filter(t=>ticketMonth(t)===curMonth && t.statut!=="verif");
-  const box = document.getElementById("ticketList");
-  const cat = document.getElementById("catBox");
-
-  if(list.length===0){
-    cat.innerHTML="";
-    box.innerHTML=`<div class="empty"><span class="ico">🌺</span>Aucun ticket sur ${monthLabel(curMonth)}.<br>Appuie sur le bouton doré pour scanner.</div>`;
-    return;
-  }
-
-  const cats = {};
-  let tot=0;
-  list.forEach(t=>{ const v=Number(t.total||0); cats[t.categorie]=(cats[t.categorie]||0)+v; tot+=v; });
-  cat.innerHTML = `<div class="catbar">${
-    Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>`
-      <div class="catrow">
-        <span class="name">${c}</span>
-        <span class="bar"><i style="width:${tot?Math.round(v/tot*100):0}%"></i></span>
-        <span class="amt num">${fmt(v)}</span>
-      </div>`).join("")
-  }</div>`;
-
-  box.innerHTML = list.map(t=>ticketHTML(t)).join("");
-}
-
-function ticketHTML(t){
-  const flag = t.pays==="FR" ? `<span class="flag flag-fr">FR</span>` : `<span class="flag flag-ch">CH</span>`;
-  const warn = t.statut==="verif" ? `<span class="flag flag-warn">À VÉRIFIER</span>` : "";
-  return `<div class="ticket" style="position:relative" onclick="openSheet('${t.id}')">
-    <div style="flex:1">
-      <div class="who">${t.fournisseur} ${flag} ${warn}</div>
-      <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie} · ${(t.lignes||[]).length} art.</div>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px">
-      <div class="amt num">${fmt(t.total)}<span class="cur">${t.devise}</span></div>
-      <button onclick="event.stopPropagation();delTicket('${t.id}')" style="background:none;border:none;color:#c44;font-size:18px;padding:6px;cursor:pointer">🗑</button>
-    </div>
-  </div>`;
-}
-
-function renderVerif(){
-  const v = tickets.filter(t=>t.statut==="verif");
-  document.getElementById("verifBlock").classList.toggle("hidden", v.length===0);
-  document.getElementById("verifList").innerHTML = v.map(t=>ticketHTML(t)).join("");
-}
-
-async function loadCustomIngredients(){
-  // ingrédients créés directement dans l'appli food cost (clé kaikaikGeneva_ing_custom_v1)
-  try{
-    const rows = await sbSelect(T_DATA, "select=contenu&id=eq.kaikaikGeneva_ing_custom_v1");
-    if(!rows[0] || !rows[0].contenu) return;
-    const d = JSON.parse(rows[0].contenu);
-    Object.keys(d).forEach(k=>{
-      if(!d[k] || !d[k].name) return;
-      FC_INGREDIENTS[k] = d[k].name;
-      if(d[k].unit && d[k].unit!=="kg") FC_UNIT[k] = d[k].unit;
-    });
-  }catch(e){}
-}
-async function syncFoodCostPrice(ingKey, newPrice, meta){
-  try{
-    const r = await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA+"?id=eq."+SK_PRICES+"&select=contenu",{headers:sbHeaders()});
-    if(!r.ok) return;
-    const rows = await r.json();
-    let data = {ING:{},DS:{},BS:{},META:{}};
-    if(rows.length>0 && rows[0].contenu){ try{ data = JSON.parse(rows[0].contenu); }catch(e){} }
-    ["ING","DS","BS","META"].forEach(k=>{ if(!data[k]) data[k]={}; });
-    const g = fcGroup(ingKey); data[g][ingKey] = newPrice;
-    data.META[ingKey] = Object.assign({maj:todayISO()}, meta||{});
-    await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA,{
-      method:"POST",
-      headers:Object.assign({},sbHeaders(),{"Prefer":"resolution=merge-duplicates"}),
-      body:JSON.stringify({id:SK_PRICES, contenu:JSON.stringify(data), updated_at:new Date().toISOString()})
-    });
-  }catch(e){ console.warn("Sync food cost échoué:",e); }
-}
-
-function renderAll(){ fillMonths(); renderHead(); renderList(); renderVerif(); }
-
-/* =================== BOTTOM SHEET =================== */
-function openSheet(id){
-  const t = tickets.find(x=>x.id===id);
-  if(!t) return;
-  const flag = t.pays==="FR" ? `<span class="flag flag-fr">FR</span>` : `<span class="flag flag-ch">CH</span>`;
-  const warn = t.statut==="verif" ? `<span class="flag flag-warn">À VÉRIFIER</span>` : "";
-  document.getElementById("sheet").innerHTML = `
-    <div class="grab"></div>
-    <div class="who">${t.fournisseur} ${flag} ${warn}</div>
-    <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
-    <div class="amt num">${fmt(t.total)} <span class="cur">${t.devise}</span></div>
-    ${(t.lignes||[]).map((l,i)=>{const map=mappings.find(m=>m.produit_label===(l.designation||"").trim().toLowerCase());const pb=map&&map.ingredient&&map.ingredient!=="__ignore"?prixBase(l,map):null;const info=map?(map.ingredient==="__ignore"?"ignoré":map.ingredient?(pb?`→ ${FC_INGREDIENTS[map.ingredient]} · ${fmt(toCHF(pb,t.devise))} CHF/${fcUnit(map.ingredient)}`:`→ ${FC_INGREDIENTS[map.ingredient]} · <span style="color:#c44">poids de paquet manquant</span>`):`<span style="color:#c44">à relier ⚙︎</span>`):"";return `<div class="sline" style="flex-wrap:wrap;align-items:center">
-      <span style="flex:1 1 100%;margin-bottom:6px">${l.designation}</span>
-      <input type="number" step="0.01" inputmode="decimal" value="${l.quantite||""}" onchange="editLigne('${t.id}',${i},'quantite',this.value)" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right"> <span class="small" style="margin:0 8px 0 4px">${l.unite||"pce"}</span>
-      <input type="number" step="0.01" inputmode="decimal" value="${Number(l.total||0).toFixed(2)}" onchange="editLigne('${t.id}',${i},'total',this.value)" style="width:78px;padding:6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right;font-weight:600">
-      <button onclick="supprimerLigne('${t.id}',${i})" style="background:none;border:none;color:#c44;font-size:18px;padding:0 4px 0 10px;cursor:pointer">✕</button>
-      ${info?`<div style="width:100%;font-size:11px;color:var(--muted);margin-top:4px">${info}</div>`:""}
-    </div>`;}).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
-    <label>Catégorie</label>
-    <select onchange="editTicket('${t.id}','categorie',this.value)">
-      ${["Matières premières","Packaging","Autre"].map(c=>`<option ${c===t.categorie?"selected":""}>${c}</option>`).join("")}
-    </select>
-    <label>Pays fournisseur</label>
-    <select onchange="editTicket('${t.id}','pays',this.value)">
-      <option value="CH" ${t.pays==="CH"?"selected":""}>🇨🇭 Suisse (CHF)</option>
-      <option value="FR" ${t.pays==="FR"?"selected":""}>🇫🇷 France (EUR)</option>
-    </select>
-    ${t.statut==="verif" ? `<div style="margin-top:16px"><button class="btn btn-gold" onclick="markOk('${t.id}');closeSheet()">Marquer comme vérifié</button></div>`:""}
-    <div style="margin-top:14px"><button class="btn btn-line" onclick="voirPhoto('${t.id}')">Voir la photo du ticket</button></div>
-    <div id="photoBox" style="margin-top:10px"></div>
-    <div style="margin-top:10px"><button class="btn btn-danger" onclick="delTicket('${t.id}')">Supprimer ce ticket</button></div>
-  `;
-  document.getElementById("sheetScrim").classList.remove("hidden");
-  requestAnimationFrame(()=>{
-    document.getElementById("sheetScrim").classList.add("on");
-    document.getElementById("sheet").classList.add("on");
-  });
-}
-function closeSheet(){
-  document.getElementById("sheetScrim").classList.remove("on");
-  document.getElementById("sheet").classList.remove("on");
-  setTimeout(()=>document.getElementById("sheetScrim").classList.add("hidden"),240);
-}
-
-async function editTicket(id, field, val){
-  const patch = {[field]:val};
-  if(field==="pays") patch.devise = (val==="FR" ? "EUR" : "CHF");
-  try{ await sbUpdate(T_ACHATS, id, patch); const t=tickets.find(x=>x.id===id); if(t) Object.assign(t, patch); renderAll(); }
-  catch(e){ toast("Modification non enregistrée (hors ligne ?)","err"); }
-}
-async function editLigne(ticketId, idx, field, val){
-  const t = tickets.find(x=>String(x.id)===String(ticketId));
-  if(!t || !t.lignes || !t.lignes[idx]) return;
-  const l = t.lignes[idx];
-  l[field] = Number(val)||0;
-  if(field==="quantite" && l.quantite>0) l.prix_unitaire = Number(l.total||0)/l.quantite;
-  t.total = t.lignes.reduce((s,x)=>s+Number(x.total||0), 0);
-  try{
-    await sbUpdate(T_ACHATS, t.id, {lignes:t.lignes, total:t.total});
-    const map = mappings.find(m=>m.produit_label===(l.designation||"").trim().toLowerCase());
-    if(map && map.ingredient && map.ingredient!=="__ignore" && prixBase(l,map)!==null){ try{ if(await appliquerPrix(map,l,t)) toast(`Prix ${FC_INGREDIENTS[map.ingredient]} mis à jour.`,"ok"); }catch(e){} }
-    openSheet(t.id); renderAll();
-  }catch(e){ toast("Modification non enregistrée (hors ligne ?)","err"); }
-}
-async function voirPhoto(id){
-  const box = document.getElementById("photoBox"); if(!box) return;
-  box.innerHTML = `<div class="small">Chargement…</div>`;
-  try{
-    const rows = await sbSelect(T_ACHATS, "select=photo&id=eq."+id);
-    const b64 = rows[0] && rows[0].photo;
-    box.innerHTML = b64 ? `<img src="data:image/jpeg;base64,${b64}" style="width:100%;border-radius:10px">` : `<div class="small">Pas de photo.</div>`;
-  }catch(e){ box.innerHTML = `<div class="small">Photo indisponible.</div>`; }
-}
-async function supprimerLigne(ticketId, idx){
-  const t = tickets.find(x=>String(x.id)===String(ticketId));
-  if(!t || !t.lignes || !t.lignes[idx]) return;
-  const nom = t.lignes[idx].designation || "ligne";
-  t.lignes.splice(idx, 1);
-  t.total = t.lignes.reduce((s,l)=>s+Number(l.total||0), 0);
-  try{
-    await sbUpdate(T_ACHATS, t.id, {lignes:t.lignes, total:t.total});
-    toast(`${nom} supprimé — total recalculé.`,"ok");
-    openSheet(t.id);
-    renderAll();
-  }catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
-}
-async function delTicket(id){
-  if(!confirm("Supprimer ce ticket ?")) return;
-  try{ await sbDelete(T_ACHATS, id); tickets = tickets.filter(t=>t.id!==id); closeSheet(); renderAll(); }
-  catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
-}
-async function markOk(id){ await editTicket(id,"statut","ok"); const t=tickets.find(x=>x.id===id); if(t) await updateIngredientPrices(t); }
-
-/* =================== MAPPINGS =================== */
-function renderMappings(){
-  const box = document.getElementById("mapList");
-  if(mappings.length===0){ box.innerHTML=`<div class="small">Aucun produit scanné pour l'instant.</div>`; return; }
-  const rank = m => !m.ingredient ? 0 : (m.ingredient==="__ignore" ? 2 : 1);
-  const list = [...mappings].sort((a,b)=>rank(a)-rank(b) || a.produit_label.localeCompare(b.produit_label));
-  const nbTodo = mappings.filter(m=>!m.ingredient).length;
-  const head = nbTodo ? `<div style="margin-bottom:12px"><button class="btn btn-gold" onclick="suggererMappings()">✨ Relier automatiquement les ${nbTodo} produits restants</button></div>` : "";
-  box.innerHTML = head + list.map(m=>{
-    let opts = `<option value="">— À relier —</option><option value="__ignore" ${m.ingredient==="__ignore"?"selected":""}>✕ Ignorer (pas un ingrédient)</option>`;
-    Object.keys(FC_INGREDIENTS).forEach(k=>{ opts += `<option value="${k}" ${m.ingredient===k?"selected":""}>${FC_INGREDIENTS[k]} — /${fcUnit(k)}</option>`; });
-    const st = !m.ingredient ? `<span class="flag flag-warn">À RELIER</span>` : (m.ingredient==="__ignore" ? `<span class="flag">IGNORÉ</span>` : `<span class="flag flag-ch">OK</span>`);
-    return `<div class="mapcard" style="${m.ingredient==="__ignore"?"opacity:.55":""}">
-      <div class="plabel">${m.produit_label} ${st}</div>
-      <select onchange="saveMap('${m.id}', this.value)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--stroke);background:transparent;color:inherit;font-size:14px">${opts}</select>
-      ${m.ingredient && m.ingredient!=="__ignore" ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px">
-        <span class="small" style="flex:1">Contenance d'une unité achetée${fcUnit(m.ingredient)==="pièce"?" (nb de pièces)":" ("+fcUnit(m.ingredient)+")"}</span>
-        <input type="number" step="0.001" inputmode="decimal" value="${m.poids_unite||""}" placeholder="${fcUnit(m.ingredient)==="pièce"?"1":"ex. 0.25"}" onchange="saveMapPoids('${m.id}', this.value)" style="width:90px;padding:8px;border-radius:8px;border:1px solid ${m.poids_unite||fcUnit(m.ingredient)==="pièce"?"var(--stroke)":"#c44"};background:transparent;color:inherit;font-size:14px;text-align:right">
-      </div>`:""}
-      ${m.dernier_prix && m.ingredient && m.ingredient!=="__ignore" ? `<div class="small" style="margin-top:9px">Dernier prix appliqué : ${fmt(m.dernier_prix)} CHF/${fcUnit(m.ingredient)}</div>`:""}
+/* ---- TABLEAU DES PRIX ---- */
+function renderPrix(){
+  const box=document.getElementById("prixList");
+  const q=(document.getElementById("prixSearch").value||"").trim().toLowerCase();
+  const rows=[];
+  monthTickets().forEach(t=>(t.lignes||[]).forEach((l,i)=>{ if(!q || (l.designation||"").toLowerCase().includes(q)) rows.push({t,l,i}); }));
+  if(!rows.length){ box.innerHTML=`<div class="empty"><span class="ico">🌺</span>${q?"Aucun produit ne correspond.":"Aucun article sur "+monthLabel(curMonth)+".<br>Appuie sur le bouton doré pour scanner un ticket."}</div>`; return; }
+  rows.sort((a,b)=>(a.l.designation||"").localeCompare(b.l.designation||""));
+  box.innerHTML=rows.map(({t,l,i})=>{
+    const pr=prixRef(l); const chf=pr?toCHF(pr.v,t.devise):null;
+    const pce=l.unite&&!["kg","g","l","ml"].includes(l.unite);
+    return `<div class="mapcard" style="padding:12px 14px">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline">
+        <div class="plabel" style="margin:0;text-transform:capitalize">${esc(l.designation)}</div>
+        <div class="num" style="font-weight:800;white-space:nowrap">${chf!==null?fmt(chf)+" <span class='small'>CHF/"+pr.u+"</span>":"—"}</div>
+      </div>
+      <div class="small" style="margin-top:4px">${l.quantite||""} ${esc(l.unite||"pce")} · ${fmt(l.total)} ${t.devise}${t.devise==="EUR"?" ("+fmt(toCHF(Number(l.total),t.devise))+" CHF)":""} · ${esc(t.fournisseur)} · ${esc(t.date_ticket||"")}</div>
+      ${pce?`<div style="display:flex;align-items:center;gap:8px;margin-top:8px"><span class="small" style="flex:1">Contenance d'une unité</span>
+        <input type="number" step="0.001" inputmode="decimal" value="${l.contenance||""}" placeholder="ex. 0.25" onchange="setCont('${t.id}',${i},this.value)" style="width:80px;padding:7px;border-radius:8px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right">
+        <select onchange="setContU('${t.id}',${i},this.value)" style="width:auto;padding:7px;border-radius:8px;border:1px solid var(--stroke);background:transparent;color:inherit"><option value="kg" ${l.cont_unite!=="L"?"selected":""}>kg</option><option value="L" ${l.cont_unite==="L"?"selected":""}>L</option></select></div>`:""}
     </div>`;
   }).join("");
 }
-async function suggererMappings(){
-  const todo = mappings.filter(m=>!m.ingredient);
-  if(!todo.length) return;
-  if(!CFG.apiKey){ toast("Clé API Anthropic manquante.","err"); return; }
-  showOverlay("Reconnaissance des produits…");
-  try{
-    const prompt = `Voici des libellés de tickets de caisse d'un restaurant. Pour chacun, donne la clé de l'ingrédient correspondant parmi : ${FC_LIST()}. Réponds UNIQUEMENT en JSON : {"<libellé>": {"cle": "<clé>" ou null, "contenance": nombre ou null}} — cle null si ce n'est aucun de ces ingrédients ; contenance = ce que contient une unité achetée dans l'unité de prix de l'ingrédient (kg, L, ou nb de pièces), d'après le libellé et les formats courants, null si inconnu.\nLibellés : ${JSON.stringify(todo.map(m=>m.produit_label))}`;
-    const r = await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":CFG.apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1500,messages:[{role:"user",content:prompt}]})});
-    const data = await r.json();
-    const txt = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
-    const res = JSON.parse(txt.replace(/```json|```/g,"").trim());
-    let n=0;
-    for(const m of todo){
-      const r = res[m.produit_label] || {};
-      const k = typeof r==="string" ? r : r.cle;
-      const ing = (k && FC_INGREDIENTS[k]) ? k : "__ignore";
-      const cont = (r && Number(r.contenance)>0) ? Number(r.contenance) : (m.poids_unite||null);
-      try{ await sbUpdate(T_MAP, m.id, {ingredient:ing, poids_unite:cont}); m.ingredient=ing; m.poids_unite=cont; n++; await reappliquer(m); }catch(e){}
-    }
-    hideOverlay(); toast(`✓ ${n} produits reliés. Vérifie et corrige si besoin.`,"ok"); renderMappings();
-  }catch(e){ hideOverlay(); toast("Reconnaissance impossible, réessaie.","err"); }
-}
-async function reappliquer(map){
-  // ré-applique le prix à partir du ticket le plus récent contenant ce produit
-  if(!map.ingredient || map.ingredient==="__ignore") return false;
-  for(const t of tickets){
-    if(t.statut==="verif") continue;
-    const l = (t.lignes||[]).find(x=>(x.designation||"").trim().toLowerCase()===map.produit_label);
-    if(l){ if(prixBase(l,map)===null) return false; try{ return await appliquerPrix(map,l,t); }catch(e){ return false; } }
-  }
-  return false;
-}
-async function saveMapPoids(id, val){
-  const v = Number(val)||null;
-  try{
-    await sbUpdate(T_MAP, id, {poids_unite:v}); const m=mappings.find(x=>x.id===id); if(m) m.poids_unite=v;
-    const ok = m ? await reappliquer(m) : false;
-    toast(ok?`✓ Prix ${FC_INGREDIENTS[m.ingredient]} recalculé.`:(v?"Contenance enregistrée.":"Contenance effacée."),"ok"); renderMappings();
-  }catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
-}
-async function saveMap(id, val){
-  try{
-    await sbUpdate(T_MAP, id, {ingredient:val.trim()}); const m=mappings.find(x=>x.id===id); if(m) m.ingredient=val.trim();
-    const ok = m ? await reappliquer(m) : false;
-    if(ok) toast(`✓ Prix ${FC_INGREDIENTS[m.ingredient]} envoyé dans l'onglet Réel.`,"ok");
-    renderMappings();
-  }catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
+async function saveLignes(t){ try{ await sbUpdate(t.id,{lignes:t.lignes,total:t.total}); }catch(e){ toast("Non enregistré (hors ligne ?)","err"); } }
+async function setCont(id,i,v){ const t=tickets.find(x=>String(x.id)===String(id)); if(!t||!t.lignes[i]) return; t.lignes[i].contenance=Number(v)||null; await saveLignes(t); renderPrix(); }
+async function setContU(id,i,v){ const t=tickets.find(x=>String(x.id)===String(id)); if(!t||!t.lignes[i]) return; t.lignes[i].cont_unite=v; await saveLignes(t); renderPrix(); }
+
+/* ---- DÉPENSES MENSUELLES ---- */
+const depOpen={};
+function renderDepenses(){
+  const box=document.getElementById("depList"); const fx=CFG.fx||0.94;
+  const byM={};
+  tickets.filter(t=>t.statut!=="verif").forEach(t=>{
+    const k=ticketMonth(t); if(!k||k.length!==7) return;
+    const m=byM[k]||(byM[k]={ch:0,fr:0,n:0,four:{}});
+    const tot=Number(t.total)||0; if(t.pays==="FR") m.fr+=tot; else m.ch+=tot; m.n++;
+    const f=t.fournisseur||"?"; m.four[f]=(m.four[f]||0)+toCHF(tot,t.devise);
+  });
+  const months=Object.keys(byM).sort().reverse();
+  if(!months.length){ box.innerHTML=`<div class="empty"><span class="ico">🌺</span>Aucune dépense enregistrée.</div>`; return; }
+  const totaux=months.map(k=>byM[k].ch+byM[k].fr*fx);
+  const max=Math.max(...totaux,1);
+  const moy=totaux.reduce((s,v)=>s+v,0)/totaux.length;
+  box.innerHTML=`<h2>Dépenses par mois</h2>
+    <div class="small" style="margin-bottom:14px">Total en CHF (France convertie au taux ${fx}). Moyenne : <b>${fmt(moy)} CHF</b> sur ${months.length} mois.</div>`+
+    months.map((k,i)=>{const m=byM[k]; const tot=totaux[i]; const prev=totaux[i+1]; const d=prev?((tot-prev)/prev*100):null;
+      const entries=tickets.filter(t=>t.statut!=="verif"&&ticketMonth(t)===k).sort((a,b)=>String(b.date_ticket||b.created_at).localeCompare(String(a.date_ticket||a.created_at)));
+      const open=depOpen[k]?true:false;
+      return `<div class="mapcard" style="padding:14px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;cursor:pointer" onclick="depOpen['${k}']=!depOpen['${k}'];renderDepenses()">
+          <div class="plabel" style="margin:0;font-size:15px">${open?"▾":"▸"} ${monthLabel(k)}</div>
+          <div class="num" style="font-weight:800;font-size:18px">${fmt(tot)} <span class="small">CHF</span></div>
+        </div>
+        <div style="height:6px;border-radius:3px;background:var(--stroke);margin:10px 0 8px;overflow:hidden"><div style="height:100%;width:${Math.round(tot/max*100)}%;background:var(--gold)"></div></div>
+        <div class="small">🇨🇭 ${fmt(m.ch)} CHF · 🇫🇷 ${fmt(m.fr)} EUR · ${m.n} dépense${m.n>1?"s":""}${d!==null?` · <span style="color:${d>0?"#EFA995":"#9FD6B3"}">${d>0?"+":""}${d.toFixed(0)}% vs mois préc.</span>`:""}</div>
+        ${open?`<div style="margin-top:10px;border-top:1px solid var(--stroke)">${entries.map(t=>`<div class="sline" style="align-items:center;cursor:pointer" onclick="openSheet('${t.id}')">
+            <span style="flex:1"><span style="color:var(--text)">${esc(t.fournisseur)}</span> <span class="small">${esc(t.date_ticket||"")}${t.lignes&&t.lignes.length?" · "+t.lignes.length+" art.":" · manuel"}</span></span>
+            <span class="num">${fmt(t.total)} ${t.devise}</span>
+            <button onclick="event.stopPropagation();delTicket('${t.id}')" style="background:none;border:none;color:#c44;font-size:16px;padding:0 0 0 10px;cursor:pointer">🗑</button>
+          </div>`).join("")}</div>`:""}
+      </div>`;}).join("");
 }
 
-/* =================== EXPORT =================== */
+/* ---- AJOUT MANUEL ---- */
+function ouvrirAjoutDepense(){
+  const d=new Date(); const today=`${String(d.getDate()).padStart(2,"0")}.${String(d.getMonth()+1).padStart(2,"0")}.${d.getFullYear()}`;
+  document.getElementById("sheet").innerHTML=`
+    <div class="grab"></div>
+    <div class="who">Nouvelle dépense</div>
+    <label>Libellé (fournisseur, loyer, abonnement…)</label>
+    <input type="text" id="adLib" placeholder="ex. Loyer Bring Kitchens">
+    <label>Montant</label>
+    <input type="number" step="0.01" inputmode="decimal" id="adMontant" placeholder="0.00">
+    <label>Pays / devise</label>
+    <select id="adPays"><option value="CH">🇨🇭 Suisse (CHF)</option><option value="FR">🇫🇷 France (EUR)</option></select>
+    <label>Date</label>
+    <input type="text" id="adDate" value="${today}" placeholder="JJ.MM.AAAA">
+    <div style="margin-top:18px"><button class="btn btn-gold" onclick="ajouterDepense()">Enregistrer</button></div>
+    <div style="margin-top:10px"><button class="btn btn-line" onclick="closeSheet()">Annuler</button></div>`;
+  document.getElementById("sheetScrim").classList.remove("hidden");
+  requestAnimationFrame(()=>{document.getElementById("sheetScrim").classList.add("on");document.getElementById("sheet").classList.add("on");});
+  setTimeout(()=>document.getElementById("adLib").focus(),300);
+}
+async function ajouterDepense(){
+  const lib=document.getElementById("adLib").value.trim(); const montant=Number(document.getElementById("adMontant").value)||0;
+  const pays=document.getElementById("adPays").value; const date=document.getElementById("adDate").value.trim();
+  if(!lib||!montant){ toast("Libellé et montant obligatoires.","err"); return; }
+  if(date&&!monthKey(date)){ toast("Date au format JJ.MM.AAAA.","err"); return; }
+  const row={date_ticket:date,fournisseur:lib,pays,devise:pays==="FR"?"EUR":"CHF",categorie:"Manuel",total:montant,lignes:[],photo:null,statut:"ok",created_at:todayISO()};
+  try{ const [saved]=await sbInsert(row); delete saved.photo; tickets.unshift(saved); closeSheet(); const mk=ticketMonth(saved); if(mk) depOpen[mk]=true; renderAll(); renderDepenses(); toast(`✓ ${lib} — ${fmt(montant)} ${row.devise}`,"ok"); }
+  catch(e){ toast("Enregistrement impossible (hors ligne ?)","err"); }
+}
+
+/* ---- TICKETS ---- */
+function ticketHTML(t){
+  const flag=t.pays==="FR"?`<span class="flag flag-fr">FR</span>`:`<span class="flag flag-ch">CH</span>`;
+  const warn=t.statut==="verif"?`<span class="flag flag-warn">À VÉRIFIER</span>`:"";
+  return `<div class="ticket" onclick="openSheet('${t.id}')">
+    <div style="flex:1"><div class="who">${esc(t.fournisseur)} ${flag} ${warn}</div><div class="meta">${esc(t.date_ticket||"date ?")} · ${(t.lignes||[]).length} art.</div></div>
+    <div style="display:flex;align-items:center;gap:12px"><div class="amt num">${fmt(t.total)}<span class="cur">${t.devise}</span></div>
+    <button onclick="event.stopPropagation();delTicket('${t.id}')" style="background:none;border:none;color:#c44;font-size:18px;padding:6px;cursor:pointer">🗑</button></div>
+  </div>`;
+}
+function renderList(){
+  const list=monthTickets(); const box=document.getElementById("ticketList");
+  box.innerHTML=list.length?list.map(ticketHTML).join(""):`<div class="empty"><span class="ico">🌺</span>Aucun ticket sur ${monthLabel(curMonth)}.</div>`;
+  const v=tickets.filter(t=>t.statut==="verif");
+  document.getElementById("verifBlock").classList.toggle("hidden",v.length===0);
+  document.getElementById("verifList").innerHTML=v.map(ticketHTML).join("");
+}
+function renderAll(){ fillMonths(); renderHead(); renderPrix(); renderList(); if(!document.getElementById("view-depenses").classList.contains("hidden")) renderDepenses(); }
+
+function openSheet(id){
+  const t=tickets.find(x=>String(x.id)===String(id)); if(!t) return;
+  const flag=t.pays==="FR"?`<span class="flag flag-fr">FR</span>`:`<span class="flag flag-ch">CH</span>`;
+  document.getElementById("sheet").innerHTML=`
+    <div class="grab"></div>
+    <div class="who">${esc(t.fournisseur)} ${flag}</div>
+    <div class="amt num">${fmt(t.total)} <span class="cur">${t.devise}</span></div>
+    <label>Libellé / fournisseur</label>
+    <input type="text" value="${esc(t.fournisseur)}" onchange="editTicket('${t.id}','fournisseur',this.value)">
+    <label>Date</label>
+    <input type="text" value="${esc(t.date_ticket||"")}" placeholder="JJ.MM.AAAA" onchange="if(this.value&&!monthKey(this.value)){toast('Date au format JJ.MM.AAAA.','err');return;}editTicket('${t.id}','date_ticket',this.value)">
+    ${!(t.lignes&&t.lignes.length)?`<label>Montant</label><input type="number" step="0.01" inputmode="decimal" value="${Number(t.total||0).toFixed(2)}" onchange="editTicket('${t.id}','total',Number(this.value)||0)">`:`<label>Articles</label>`}
+    ${(t.lignes||[]).map((l,i)=>{const pr=prixRef(l);return `<div class="sline" style="flex-wrap:wrap;align-items:center">
+      <span style="flex:1 1 100%;margin-bottom:6px;text-transform:capitalize">${esc(l.designation)}</span>
+      <input type="number" step="0.01" inputmode="decimal" value="${l.quantite||""}" onchange="editLigne('${t.id}',${i},'quantite',this.value)" style="width:64px;padding:6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right"> <span class="small" style="margin:0 8px 0 4px">${esc(l.unite||"pce")}</span>
+      <input type="number" step="0.01" inputmode="decimal" value="${Number(l.total||0).toFixed(2)}" onchange="editLigne('${t.id}',${i},'total',this.value)" style="width:78px;padding:6px;border-radius:6px;border:1px solid var(--stroke);background:transparent;color:inherit;text-align:right;font-weight:600">
+      <button onclick="supprimerLigne('${t.id}',${i})" style="background:none;border:none;color:#c44;font-size:18px;padding:0 4px 0 10px;cursor:pointer">✕</button>
+      ${pr?`<div style="width:100%;font-size:11px;color:var(--muted);margin-top:4px">${fmt(toCHF(pr.v,t.devise))} CHF/${pr.u}</div>`:""}
+    </div>`;}).join("")||`<div class="small" style="margin:8px 0">Aucune ligne lue.</div>`}
+    <label>Pays fournisseur</label>
+    <select onchange="editTicket('${t.id}','pays',this.value)"><option value="CH" ${t.pays==="CH"?"selected":""}>🇨🇭 Suisse (CHF)</option><option value="FR" ${t.pays==="FR"?"selected":""}>🇫🇷 France (EUR)</option></select>
+    ${t.statut==="verif"?`<div style="margin-top:16px"><button class="btn btn-gold" onclick="editTicket('${t.id}','statut','ok');closeSheet()">Marquer comme vérifié</button></div>`:""}
+    <div style="margin-top:14px"><button class="btn btn-line" onclick="voirPhoto('${t.id}')">Voir la photo</button></div><div id="photoBox" style="margin-top:10px"></div>
+    <div style="margin-top:10px"><button class="btn btn-danger" onclick="delTicket('${t.id}')">Supprimer ce ticket</button></div>`;
+  document.getElementById("sheetScrim").classList.remove("hidden");
+  requestAnimationFrame(()=>{document.getElementById("sheetScrim").classList.add("on");document.getElementById("sheet").classList.add("on");});
+}
+function closeSheet(){ document.getElementById("sheetScrim").classList.remove("on"); document.getElementById("sheet").classList.remove("on"); setTimeout(()=>document.getElementById("sheetScrim").classList.add("hidden"),240); }
+async function editTicket(id,field,val){
+  const patch={[field]:val}; if(field==="pays") patch.devise=(val==="FR"?"EUR":"CHF");
+  try{ await sbUpdate(id,patch); const t=tickets.find(x=>String(x.id)===String(id)); if(t) Object.assign(t,patch); renderAll(); }catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
+}
+async function editLigne(id,i,field,val){
+  const t=tickets.find(x=>String(x.id)===String(id)); if(!t||!t.lignes[i]) return;
+  const l=t.lignes[i]; l[field]=Number(val)||0; if(field==="quantite"&&l.quantite>0) l.prix_unitaire=Number(l.total||0)/l.quantite;
+  t.total=t.lignes.reduce((s,x)=>s+Number(x.total||0),0); await saveLignes(t); openSheet(t.id); renderAll();
+}
+async function supprimerLigne(id,i){
+  const t=tickets.find(x=>String(x.id)===String(id)); if(!t||!t.lignes[i]) return;
+  t.lignes.splice(i,1); t.total=t.lignes.reduce((s,x)=>s+Number(x.total||0),0); await saveLignes(t); openSheet(t.id); renderAll();
+}
+async function delTicket(id){ if(!confirm("Supprimer ce ticket ?")) return; try{ await sbDelete(id); tickets=tickets.filter(t=>String(t.id)!==String(id)); closeSheet(); renderAll(); }catch(e){ toast("Suppression impossible (hors ligne ?)","err"); } }
+async function voirPhoto(id){ const box=document.getElementById("photoBox"); box.innerHTML=`<div class="small">Chargement…</div>`; try{ const rows=await sbSelect("select=photo&id=eq."+id); const b=rows[0]&&rows[0].photo; box.innerHTML=b?`<img src="data:image/jpeg;base64,${b}" style="width:100%;border-radius:10px">`:`<div class="small">Pas de photo.</div>`; }catch(e){ box.innerHTML=`<div class="small">Photo indisponible.</div>`; } }
+
+/* ---- EXPORT ---- */
 function doExport(){
-  const m = document.getElementById("exportMonth").value;
-  const fx = Number(document.getElementById("fxRate").value)||CFG.fx||0.94;
-  const list = tickets.filter(t=>ticketMonth(t)===m);
-  if(list.length===0){
-    document.getElementById("exportMsg").innerHTML=`<div class="msg msg-err">Aucun ticket sur ${monthLabel(m)}.</div>`;
-    return;
-  }
-  const rows = [];
-  const head = ["Date","Fournisseur","Catégorie","Désignation","Qté","Unité","Prix unit.","Total ligne","Total ticket","Devise","Équiv. CHF"];
-  const push = (t)=>{
-    const eq = t.devise==="EUR" ? (t.total*fx) : t.total;
-    if(!t.lignes || t.lignes.length===0){
-      rows.push([t.date_ticket,t.fournisseur,t.categorie,"","","","","",Number(t.total).toFixed(2),t.devise,eq.toFixed(2)]);
-    }else{
-      t.lignes.forEach((l,i)=>{
-        rows.push([t.date_ticket,t.fournisseur,t.categorie,l.designation,l.quantite,l.unite,
-          Number(l.prix_unitaire).toFixed(2),Number(l.total).toFixed(2),
-          i===0?Number(t.total).toFixed(2):"",t.devise,i===0?eq.toFixed(2):""]);
-      });
-    }
-  };
-  const ch = list.filter(t=>t.pays==="CH");
-  const fr = list.filter(t=>t.pays==="FR");
-  rows.push([`=== FOURNISSEURS SUISSE — ${m} ===`]); rows.push(head);
-  ch.forEach(push);
-  rows.push([`Sous-total Suisse`,"","","","","","","",ch.reduce((s,t)=>s+Number(t.total),0).toFixed(2),"CHF",""]);
-  rows.push([]);
-  rows.push([`=== FOURNISSEURS FRANCE — ${m} — taux ${fx} ===`]); rows.push(head);
-  fr.forEach(push);
-  const totFR = fr.reduce((s,t)=>s+Number(t.total),0);
-  rows.push([`Sous-total France`,"","","","","","","",totFR.toFixed(2),"EUR",(totFR*fx).toFixed(2)]);
-
-  const csv = rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");
-  const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `kaikai_achats_${m}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const m=document.getElementById("exportMonth").value; const fx=Number(document.getElementById("fxRate").value)||CFG.fx||0.94;
+  const list=tickets.filter(t=>ticketMonth(t)===m);
+  if(!list.length){ document.getElementById("exportMsg").innerHTML=`<div class="msg msg-err">Aucun ticket sur ${monthLabel(m)}.</div>`; return; }
+  const rows=[]; const head=["Date","Fournisseur","Produit","Qté","Unité","Total ligne","Devise","Total CHF","Prix unitaire CHF","Unité de prix"];
+  const push=t=>{ (t.lignes&&t.lignes.length?t.lignes:[{designation:"(dépense manuelle)",quantite:"",unite:"",total:t.total}]).forEach(l=>{ const pr=prixRef(l); const tot=Number(l.total)||0; rows.push([t.date_ticket,t.fournisseur,l.designation,l.quantite,l.unite,tot.toFixed(2),t.devise,(t.devise==="EUR"?tot*fx:tot).toFixed(2),pr?(t.devise==="EUR"?pr.v*fx:pr.v).toFixed(3):"",pr?pr.u:""]); }); };
+  const ch=list.filter(t=>t.pays==="CH"), fr=list.filter(t=>t.pays==="FR");
+  rows.push([`=== FOURNISSEURS SUISSE — ${m} ===`]); rows.push(head); ch.forEach(push);
+  rows.push([`Sous-total Suisse`,"","","","",ch.reduce((s,t)=>s+Number(t.total),0).toFixed(2),"CHF"]); rows.push([]);
+  rows.push([`=== FOURNISSEURS FRANCE — ${m} — taux ${fx} ===`]); rows.push(head); fr.forEach(push);
+  const tf=fr.reduce((s,t)=>s+Number(t.total),0); rows.push([`Sous-total France`,"","","","",tf.toFixed(2),"EUR",(tf*fx).toFixed(2)]);
+  const csv=rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`kaikai_achats_${m}.csv`; a.click(); URL.revokeObjectURL(a.href);
   document.getElementById("exportMsg").innerHTML=`<div class="msg msg-ok">✓ Export ${monthLabel(m)} téléchargé (${list.length} tickets).</div>`;
 }
 
-/* =================== CONFIG UI =================== */
-function loadCfgFields(){
-  document.getElementById("cfgSbUrl").value = CFG.sbUrl;
-  document.getElementById("cfgSbKey").value = CFG.sbKey;
-  document.getElementById("cfgApiKey").value = CFG.apiKey;
-  document.getElementById("cfgFx").value = CFG.fx || 0.94;
-}
+/* ---- CONFIG / INIT ---- */
 async function saveConfig(){
-  CFG.sbUrl = document.getElementById("cfgSbUrl").value.trim().replace(/\/$/,"");
-  CFG.sbKey = document.getElementById("cfgSbKey").value.trim();
-  CFG.apiKey = document.getElementById("cfgApiKey").value.trim();
-  CFG.fx = Number(document.getElementById("cfgFx").value)||0.94;
-  localStorage.setItem(LS, JSON.stringify(CFG));
+  CFG.apiKey=document.getElementById("cfgApiKey").value.trim(); CFG.fx=Number(document.getElementById("cfgFx").value)||0.94;
+  localStorage.setItem(LS,JSON.stringify(CFG));
   document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">Enregistré. Test de connexion…</div>`;
-  try{
-    await loadAll();
-    document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">✓ Connecté — ${tickets.length} tickets, ${mappings.length} produits connus.</div>`;
-  }catch(e){
-    document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-err">Connexion Supabase échouée : vérifie l'URL, la clé, et que les tables existent.</div>`;
-  }
+  try{ await loadAll(); document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-ok">✓ Connecté — ${tickets.length} tickets.</div>`; }
+  catch(e){ document.getElementById("cfgMsg").innerHTML=`<div class="msg msg-err">Base injoignable — vérifie ta connexion.</div>`; }
 }
-
-/* =================== INIT =================== */
-async function loadAll(){
-  tickets = await sbSelect(T_ACHATS, "select=id,date_ticket,fournisseur,pays,devise,categorie,total,lignes,statut,created_at&order=created_at.desc&limit=1000");
-  try{ mappings = await sbSelect(T_MAP, "select=*"); }catch(e){ mappings=[]; }
-  await loadCustomIngredients();
-  renderAll();
-}
-(async ()=>{
-  renderAll();
-  if(CFG.sbUrl && CFG.sbKey){
-    try{ await loadAll(); }
-    catch(e){ toast("Connexion base impossible — vérifie les réglages ⚙︎.","err"); }
-  }else{
-    showTab("config");
-  }
-})();
+async function loadAll(){ tickets=await sbSelect("select=id,date_ticket,fournisseur,pays,devise,total,lignes,statut,created_at&order=created_at.desc&limit=1000"); renderAll(); }
+(async()=>{ renderAll(); try{ await loadAll(); }catch(e){ toast("Connexion base impossible.","err"); } if(!CFG.apiKey) showTab("config"); })();
 </script>
 </body>
 </html>
