@@ -250,6 +250,11 @@
     <h2>À vérifier</h2>
     <div id="verifList"></div>
   </div>
+  <div id="prixBlock" class="hidden">
+    <h2>Prix à valider</h2>
+    <div class="small" style="margin-bottom:12px">Rien ne bouge dans tes fiches tant que tu n'as pas validé.</div>
+    <div id="prixList"></div>
+  </div>
   <div id="catBox"></div>
   <div id="ticketList"></div>
 </section>
@@ -283,7 +288,7 @@
   <div id="cfgMsg"></div>
   <h2>Produits → ingrédients</h2>
   <div class="small" style="margin-bottom:12px">
-    Relie une fois un libellé de ticket à un ingrédient de tes fiches. Ensuite le prix se met à jour tout seul à chaque scan.
+    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, les nouveaux prix arrivent dans « Prix à valider » — rien n'est modifié sans ton accord.
   </div>
   <div id="mapList"></div>
 </section>
@@ -327,10 +332,12 @@ try { Object.assign(CFG, JSON.parse(localStorage.getItem(LS)||"{}")); } catch(e)
 
 const T_ACHATS = "kaikai_achats";
 const T_MAP = "kaikai_achats_map";
+const T_PRIX = "kaikai_prix_attente";
 const TIMEOUT = 6000;
 
 let tickets = [];
 let mappings = [];
+let pending = [];
 let curMonth = new Date().toISOString().slice(0,7);
 
 /* =================== UTILS =================== */
@@ -499,13 +506,25 @@ function hideOverlay(){ document.getElementById("overlay").classList.add("hidden
 
 /* =================== MAJ PRIX INGRÉDIENTS =================== */
 async function updateIngredientPrices(ticket){
+  let nb = 0;
   for(const l of (ticket.lignes||[])){
     const label = (l.designation||"").trim().toLowerCase();
     if(!label) continue;
     const map = mappings.find(m=>m.produit_label===label);
     if(map && map.ingredient){
       const prixKg = l.unite==="kg" && l.quantite>0 ? l.total/l.quantite : l.prix_unitaire;
-      try{ await sbUpdate(T_MAP, map.id, {dernier_prix:prixKg, devise:ticket.devise, maj:todayISO()}); }catch(e){}
+      if(!prixKg || Math.abs(prixKg-(Number(map.dernier_prix)||0))<0.005) continue;
+      const deja = pending.find(p=>p.produit_label===label);
+      try{
+        if(deja){
+          await sbUpdate(T_PRIX, deja.id, {nouveau_prix:prixKg, devise:ticket.devise, fournisseur:ticket.fournisseur, date_ticket:ticket.date_ticket});
+          deja.nouveau_prix=prixKg; deja.devise=ticket.devise; deja.fournisseur=ticket.fournisseur; deja.date_ticket=ticket.date_ticket;
+        }else{
+          const [created] = await sbInsert(T_PRIX, {produit_label:label, ingredient:map.ingredient, ancien_prix:Number(map.dernier_prix)||0, nouveau_prix:prixKg, devise:ticket.devise, fournisseur:ticket.fournisseur, date_ticket:ticket.date_ticket, created_at:todayISO()});
+          pending.unshift(created);
+        }
+        nb++;
+      }catch(e){}
     }else if(!map){
       try{
         const [created] = await sbInsert(T_MAP, {produit_label:label, ingredient:"", dernier_prix:0, devise:ticket.devise, maj:todayISO()});
@@ -513,7 +532,8 @@ async function updateIngredientPrices(ticket){
       }catch(e){}
     }
   }
-  renderMappings();
+  if(nb>0) toast(`${nb} prix en attente de ta validation.`,"ok");
+  renderMappings(); renderPending();
 }
 
 /* =================== NAVIGATION =================== */
@@ -591,7 +611,7 @@ function renderList(){
 function ticketHTML(t){
   const flag = t.pays==="FR" ? `<span class="flag flag-fr">FR</span>` : `<span class="flag flag-ch">CH</span>`;
   const warn = t.statut==="verif" ? `<span class="flag flag-warn">À VÉRIFIER</span>` : "";
-  return `<div class="ticket" onclick="openSheet(${t.id})">
+  return `<div class="ticket" onclick="openSheet('${t.id}')">
     <div>
       <div class="who">${t.fournisseur} ${flag} ${warn}</div>
       <div class="meta">${t.date_ticket||"date ?"} · ${t.categorie}</div>
@@ -606,7 +626,46 @@ function renderVerif(){
   document.getElementById("verifList").innerHTML = v.map(t=>ticketHTML(t)).join("");
 }
 
-function renderAll(){ fillMonths(); renderHead(); renderList(); renderVerif(); }
+/* =================== PRIX À VALIDER =================== */
+function renderPending(){
+  const box = document.getElementById("prixBlock");
+  const list = document.getElementById("prixList");
+  if(!box) return;
+  box.classList.toggle("hidden", pending.length===0);
+  list.innerHTML = pending.map(p=>`
+    <div class="mapcard">
+      <div class="plabel">${p.ingredient||p.produit_label}</div>
+      <div class="small" style="margin:4px 0 10px">${p.produit_label}${p.fournisseur?" · "+p.fournisseur:""}${p.date_ticket?" · "+p.date_ticket:""}</div>
+      <div class="num" style="margin-bottom:10px">${fmt(p.ancien_prix)} → <b>${fmt(p.nouveau_prix)}</b> ${p.devise||""}/kg</div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-gold" style="flex:1" onclick="validerPrix('${p.id}')">✓ Valider</button>
+        <button class="btn btn-line" style="flex:1" onclick="refuserPrix('${p.id}')">✗ Refuser</button>
+      </div>
+    </div>`).join("") + (pending.length>1?`<div style="margin-top:10px"><button class="btn btn-gold" onclick="toutValider()">Tout valider (${pending.length})</button></div>`:"");
+}
+async function validerPrix(id){
+  const p = pending.find(x=>String(x.id)===String(id));
+  if(!p) return;
+  const map = mappings.find(m=>m.produit_label===p.produit_label);
+  try{
+    if(map){ await sbUpdate(T_MAP, map.id, {dernier_prix:p.nouveau_prix, devise:p.devise, maj:todayISO()}); map.dernier_prix=p.nouveau_prix; map.devise=p.devise; }
+    await sbDelete(T_PRIX, p.id);
+    pending = pending.filter(x=>x.id!==p.id);
+    toast(`✓ ${p.ingredient||p.produit_label} : ${fmt(p.nouveau_prix)} ${p.devise||""} appliqué.`,"ok");
+    renderMappings(); renderPending();
+  }catch(e){ toast("Validation impossible (hors ligne ?)","err"); }
+}
+async function refuserPrix(id){
+  const p = pending.find(x=>String(x.id)===String(id));
+  if(!p) return;
+  try{ await sbDelete(T_PRIX, p.id); pending = pending.filter(x=>x.id!==p.id); renderPending(); }
+  catch(e){ toast("Suppression impossible (hors ligne ?)","err"); }
+}
+async function toutValider(){
+  for(const p of [...pending]) await validerPrix(p.id);
+}
+
+function renderAll(){ fillMonths(); renderHead(); renderList(); renderVerif(); renderPending(); }
 
 /* =================== BOTTOM SHEET =================== */
 function openSheet(id){
@@ -621,16 +680,16 @@ function openSheet(id){
     <div class="amt num">${fmt(t.total)} <span class="cur">${t.devise}</span></div>
     ${(t.lignes||[]).map(l=>`<div class="sline"><span>${l.designation}${l.quantite?` — ${l.quantite}${l.unite?" "+l.unite:""}`:""}</span><span class="num">${fmt(l.total)}</span></div>`).join("") || `<div class="small" style="margin:8px 0">Aucune ligne lue sur ce ticket.</div>`}
     <label>Catégorie</label>
-    <select onchange="editTicket(${t.id},'categorie',this.value)">
+    <select onchange="editTicket('${t.id}','categorie',this.value)">
       ${["Matières premières","Packaging","Autre"].map(c=>`<option ${c===t.categorie?"selected":""}>${c}</option>`).join("")}
     </select>
     <label>Pays fournisseur</label>
-    <select onchange="editTicket(${t.id},'pays',this.value)">
+    <select onchange="editTicket('${t.id}','pays',this.value)">
       <option value="CH" ${t.pays==="CH"?"selected":""}>🇨🇭 Suisse (CHF)</option>
       <option value="FR" ${t.pays==="FR"?"selected":""}>🇫🇷 France (EUR)</option>
     </select>
-    ${t.statut==="verif" ? `<div style="margin-top:16px"><button class="btn btn-gold" onclick="markOk(${t.id});closeSheet()">Marquer comme vérifié</button></div>`:""}
-    <div style="margin-top:10px"><button class="btn btn-danger" onclick="delTicket(${t.id})">Supprimer ce ticket</button></div>
+    ${t.statut==="verif" ? `<div style="margin-top:16px"><button class="btn btn-gold" onclick="markOk('${t.id}');closeSheet()">Marquer comme vérifié</button></div>`:""}
+    <div style="margin-top:10px"><button class="btn btn-danger" onclick="delTicket('${t.id}')">Supprimer ce ticket</button></div>
   `;
   document.getElementById("sheetScrim").classList.remove("hidden");
   requestAnimationFrame(()=>{
@@ -663,7 +722,7 @@ function renderMappings(){
     <div class="mapcard">
       <div class="plabel">${m.produit_label}</div>
       <input type="text" value="${(m.ingredient||"").replace(/"/g,'&quot;')}" placeholder="Nom de l'ingrédient dans tes fiches"
-        onchange="saveMap(${m.id}, this.value)">
+        onchange="saveMap('${m.id}', this.value)">
       ${m.dernier_prix ? `<div class="small" style="margin-top:9px">Dernier prix : ${fmt(m.dernier_prix)} ${m.devise||""}/kg</div>`:""}
     </div>`).join("");
 }
@@ -740,6 +799,7 @@ async function saveConfig(){
 async function loadAll(){
   tickets = await sbSelect(T_ACHATS, "select=*&order=created_at.desc&limit=1000");
   try{ mappings = await sbSelect(T_MAP, "select=*"); }catch(e){ mappings=[]; }
+  try{ pending = await sbSelect(T_PRIX, "select=*&order=created_at.desc"); }catch(e){ pending=[]; }
   renderAll();
 }
 (async ()=>{
