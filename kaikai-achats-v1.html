@@ -333,6 +333,24 @@ try { Object.assign(CFG, JSON.parse(localStorage.getItem(LS)||"{}")); } catch(e)
 const T_ACHATS = "kaikai_achats";
 const T_MAP = "kaikai_achats_map";
 const T_PRIX = "kaikai_prix_attente";
+const T_DATA = "kaikai_data";
+const SK_PRICES = "kaikaikGeneva_prices_v8";
+// Clés ingrédients food cost (pour le dropdown de mapping)
+const FC_INGREDIENTS = {
+  thon:"Thon rouge",poulet:"Poulet",porc:"Porc rôti",boeuf:"Bœuf",
+  salade:"Salade verte",chouB:"Chou blanc",chouR:"Chou rouge",tomates:"Tomates",
+  concombre:"Concombre",carottes:"Carottes",champignons:"Champignons",oignon:"Oignon",
+  patate:"Patate",patatdouce:"Patate douce",mangue:"Mangue",ananas:"Ananas",
+  avocat:"Avocat",riz:"Riz",nouilles:"Nouilles chinoises",cacahuetes:"Cacahuètes",
+  sesame:"Graines de sésame",oeufs:"Œufs",laitCoco:"Lait de coco",
+  huileSesameLiq:"Huile de sésame",sauceDozo:"Sauce Dozo maison",
+  sauceArachide:"Sauce arachide",huileArachide:"Huile d'arachide",
+  ailGingembre:"Pâte ail/gingembre",cremeEntiere:"Crème entière 35%",
+  gelatine:"Gélatine",sucre:"Sucre blanc",sucreCanne:"Sucre de canne",
+  boudoir:"Boudoirs",fruitRouges:"Fruits rouges congelés",citron:"Citron",
+  banane:"Banane mûre",perlesJapon:"Perles du Japon",crumble:"Crumble maison",
+  gingembreConfit:"Gingembre confit rose"
+};
 const TIMEOUT = 6000;
 
 let tickets = [];
@@ -649,11 +667,34 @@ async function validerPrix(id){
   const map = mappings.find(m=>m.produit_label===p.produit_label);
   try{
     if(map){ await sbUpdate(T_MAP, map.id, {dernier_prix:p.nouveau_prix, devise:p.devise, maj:todayISO()}); map.dernier_prix=p.nouveau_prix; map.devise=p.devise; }
+    // Mettre à jour l'appli food cost (kaikai_data)
+    if(p.ingredient && FC_INGREDIENTS[p.ingredient]){
+      await syncFoodCostPrice(p.ingredient, p.nouveau_prix);
+    }
     await sbDelete(T_PRIX, p.id);
     pending = pending.filter(x=>x.id!==p.id);
-    toast(`✓ ${p.ingredient||p.produit_label} : ${fmt(p.nouveau_prix)} ${p.devise||""} appliqué.`,"ok");
+    toast(`✓ ${FC_INGREDIENTS[p.ingredient]||p.produit_label} : ${fmt(p.nouveau_prix)} ${p.devise||""} appliqué.`,"ok");
     renderMappings(); renderPending();
   }catch(e){ toast("Validation impossible (hors ligne ?)","err"); }
+}
+
+async function syncFoodCostPrice(ingKey, newPrice){
+  try{
+    // Lire les prix actuels de l'appli food cost
+    const r = await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA+"?id=eq."+SK_PRICES+"&select=contenu",{headers:sbHeaders()});
+    if(!r.ok) return;
+    const rows = await r.json();
+    let data = {ING:{},DS:{},BS:{},PACK:{}};
+    if(rows.length>0 && rows[0].contenu) data = JSON.parse(rows[0].contenu);
+    // Mettre à jour le prix de l'ingrédient
+    data.ING[ingKey] = newPrice;
+    // Écrire en retour
+    await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA,{
+      method:"POST",
+      headers:Object.assign({},sbHeaders(),{"Prefer":"resolution=merge-duplicates"}),
+      body:JSON.stringify({id:SK_PRICES, contenu:JSON.stringify(data), updated_at:new Date().toISOString()})
+    });
+  }catch(e){ console.warn("Sync food cost échoué:",e); }
 }
 async function refuserPrix(id){
   const p = pending.find(x=>String(x.id)===String(id));
@@ -718,13 +759,19 @@ async function markOk(id){ await editTicket(id,"statut","ok"); }
 function renderMappings(){
   const box = document.getElementById("mapList");
   if(mappings.length===0){ box.innerHTML=`<div class="small">Aucun produit scanné pour l'instant.</div>`; return; }
-  box.innerHTML = mappings.map(m=>`
-    <div class="mapcard">
+  box.innerHTML = mappings.map(m=>{
+    let opts = '<option value="">— Choisir l\'ingrédient —</option>';
+    Object.keys(FC_INGREDIENTS).forEach(k=>{
+      opts += `<option value="${k}" ${m.ingredient===k?'selected':''}>${FC_INGREDIENTS[k]} (${k})</option>`;
+    });
+    return `<div class="mapcard">
       <div class="plabel">${m.produit_label}</div>
-      <input type="text" value="${(m.ingredient||"").replace(/"/g,'&quot;')}" placeholder="Nom de l'ingrédient dans tes fiches"
-        onchange="saveMap('${m.id}', this.value)">
+      <select onchange="saveMap('${m.id}', this.value)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--brd);background:var(--bg2);color:var(--txt);font-size:14px">
+        ${opts}
+      </select>
       ${m.dernier_prix ? `<div class="small" style="margin-top:9px">Dernier prix : ${fmt(m.dernier_prix)} ${m.devise||""}/kg</div>`:""}
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 async function saveMap(id, val){
   try{ await sbUpdate(T_MAP, id, {ingredient:val.trim()}); const m=mappings.find(x=>x.id===id); if(m) m.ingredient=val.trim(); }
