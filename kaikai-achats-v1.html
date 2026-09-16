@@ -286,7 +286,7 @@
   <div id="cfgMsg"></div>
   <h2>Produits → ingrédients</h2>
   <div class="small" style="margin-bottom:12px">
-    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, l'app reconnaît les produits toute seule et met les prix à jour dans tes fiches food cost (convertis en CHF). Vérifie ici les rares cas où elle s'est trompée.
+    Relie une fois un libellé de ticket à un ingrédient de tes fiches. À chaque scan, l'app reconnaît les produits toute seule et envoie les prix réels (en CHF) dans l'onglet « Réel » de l'appli food cost — tes fiches ne sont jamais modifiées automatiquement. Vérifie ici les rares cas où elle s'est trompée.
   </div>
   <div id="mapList"></div>
 </section>
@@ -334,7 +334,7 @@ if(!CFG.sbUrl) CFG.sbUrl = SB_DEFAULT_URL; if(!CFG.sbKey) CFG.sbKey = SB_DEFAULT
 const T_ACHATS = "kaikai_achats";
 const T_MAP = "kaikai_achats_map";
 const T_DATA = "kaikai_data";
-const SK_PRICES = "kaikaikGeneva_prices_v8";
+const SK_PRICES = "kaikaikGeneva_prices_reel"; // espace séparé : ne touche jamais aux prix des fiches
 // Clés ingrédients food cost (pour le dropdown de mapping)
 const FC_INGREDIENTS = {
   thon:"Thon rouge",poulet:"Poulet",porc:"Porc rôti",boeuf:"Bœuf",
@@ -566,7 +566,7 @@ async function appliquerPrix(map, l, ticket){
   if(Math.abs(pCHF-(Number(map.dernier_prix)||0))<0.005) return false;
   await sbUpdate(T_MAP, map.id, {dernier_prix:pCHF, devise:"CHF", maj:todayISO()});
   map.dernier_prix = pCHF; map.devise = "CHF";
-  await syncFoodCostPrice(map.ingredient, Number(pCHF.toFixed(3)));
+  await syncFoodCostPrice(map.ingredient, Number(pCHF.toFixed(3)), {label:map.produit_label, fournisseur:ticket.fournisseur, date_ticket:ticket.date_ticket, devise_source:ticket.devise, prix_source:Number(p.toFixed(3))});
   return true;
 }
 async function updateIngredientPrices(ticket){
@@ -593,7 +593,7 @@ async function updateIngredientPrices(ticket){
     }
   }
   const msg = [];
-  if(updated) msg.push(updated+" prix mis à jour dans tes fiches");
+  if(updated) msg.push(updated+" prix réels envoyés au food cost");
   if(newAuto) msg.push(newAuto+" produit"+(newAuto>1?"s":"")+" reconnu"+(newAuto>1?"s":"")+" automatiquement");
   if(aVerifier) msg.push(aVerifier+" à relier ⚙︎");
   if(sansPoids) msg.push(sansPoids+" sans poids de paquet ⚙︎");
@@ -694,14 +694,16 @@ function renderVerif(){
   document.getElementById("verifList").innerHTML = v.map(t=>ticketHTML(t)).join("");
 }
 
-async function syncFoodCostPrice(ingKey, newPrice){
+async function syncFoodCostPrice(ingKey, newPrice, meta){
   try{
     const r = await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA+"?id=eq."+SK_PRICES+"&select=contenu",{headers:sbHeaders()});
     if(!r.ok) return;
     const rows = await r.json();
-    let data = {ING:{},DS:{},BS:{},PACK:{}};
-    if(rows.length>0 && rows[0].contenu) data = JSON.parse(rows[0].contenu);
-    const g = fcGroup(ingKey); if(!data[g]) data[g] = {}; data[g][ingKey] = newPrice;
+    let data = {ING:{},DS:{},BS:{},META:{}};
+    if(rows.length>0 && rows[0].contenu){ try{ data = JSON.parse(rows[0].contenu); }catch(e){} }
+    ["ING","DS","BS","META"].forEach(k=>{ if(!data[k]) data[k]={}; });
+    const g = fcGroup(ingKey); data[g][ingKey] = newPrice;
+    data.META[ingKey] = Object.assign({maj:todayISO()}, meta||{});
     await fetchTO(CFG.sbUrl+"/rest/v1/"+T_DATA,{
       method:"POST",
       headers:Object.assign({},sbHeaders(),{"Prefer":"resolution=merge-duplicates"}),
@@ -873,7 +875,7 @@ async function saveMap(id, val){
   try{
     await sbUpdate(T_MAP, id, {ingredient:val.trim()}); const m=mappings.find(x=>x.id===id); if(m) m.ingredient=val.trim();
     const ok = m ? await reappliquer(m) : false;
-    if(ok) toast(`✓ Prix ${FC_INGREDIENTS[m.ingredient]} mis à jour dans tes fiches.`,"ok");
+    if(ok) toast(`✓ Prix ${FC_INGREDIENTS[m.ingredient]} envoyé dans l'onglet Réel.`,"ok");
     renderMappings();
   }catch(e){ toast("Non enregistré (hors ligne ?)","err"); }
 }
